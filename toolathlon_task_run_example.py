@@ -454,7 +454,7 @@ def run_preprocess(task: dict, auth_env: Optional[Dict[str, str]] = None) -> Opt
     try:
         rc = subprocess.run(
             [sys.executable, str(preprocess_main), "--agent_workspace", tmp],
-            cwd=str(preprocess_main.parent), timeout=300, env=env,
+            cwd=str(preprocess_main.parent), timeout=600, env=env,
         ).returncode
         if rc != 0:
             print(f"{_RED}[preprocess]{_RST} exited with code {rc}")

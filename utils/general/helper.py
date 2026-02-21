@@ -2,8 +2,22 @@
 Minimal helper utilities extracted from Toolathlon/utils/general/helper.py.
 Only includes functions needed by task preprocess/evaluation scripts.
 """
+import json
 import os
 import asyncio
+
+
+def read_json(json_file_path):
+    with open(json_file_path, "r") as f:
+        return json.load(f)
+
+
+def write_json(data, json_file_path, mode="w"):
+    dir_path = os.path.dirname(json_file_path)
+    if dir_path and not os.path.exists(dir_path):
+        os.makedirs(dir_path, exist_ok=True)
+    with open(json_file_path, mode) as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
 
 
 def print_color(text, color="yellow", end='\n'):

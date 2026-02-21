@@ -4,3 +4,4 @@ openai-agents
 addict
 requests
 tenacity
+Pillow
