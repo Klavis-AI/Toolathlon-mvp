@@ -336,7 +336,7 @@ Supported MCP servers for sandboxing.
 
 **Type:** `string` (enum)
 
-**Values:** `jira`, `github`, `salesforce`, `hubspot`, `notion`, `airtable`, `linear`, `asana`, `google_sheets`, `google_drive`, `google_docs`, `gmail`, `google_calendar`, `google_forms`, `clickup`, `close`, `monday`, `motion`, `onedrive`, `microsoft_teams`, `outlook_mail`, `cal.com`, `quickbooks`, `moneybird`, `dropbox`, `shopify`, `woocommerce`, `outlook_calendar`, `resend`, `wordpress`, `mem0`, `supabase`, `slack`, `confluence`, `discord`, `snowflake`, `postgres`, `mongodb`, `youtube`, `localmemory`, `googleworkspaceatlas`, `arxiv_latex`, `calculator`, `clinicaltrialsgov`, `met_museum`, `open_library`, `osm`, `pubmed`, `us_weather`, `whois`, `wikipedia`, `weather`, `twelvedata`, `national_parks`, `lara_translate`, `e2b`, `context7`, `alchemy`, `weights_and_biases`, `huggingface`
+**Values:** `jira`, `github`, `salesforce`, `hubspot`, `notion`, `airtable`, `linear`, `asana`, `google_sheets`, `google_drive`, `google_docs`, `gmail`, `google_calendar`, `google_forms`, `clickup`, `close`, `monday`, `motion`, `onedrive`, `microsoft_teams`, `outlook_mail`, `cal.com`, `quickbooks`, `moneybird`, `dropbox`, `shopify`, `woocommerce`, `outlook_calendar`, `resend`, `wordpress`, `mem0`, `supabase`, `slack`, `confluence`, `discord`, `snowflake`, `postgres`, `mongodb`, `youtube`, `googleworkspaceatlas`, `arxiv_latex`, `calculator`, `clinicaltrialsgov`, `met_museum`, `open_library`, `osm`, `pubmed`, `us_weather`, `whois`, `wikipedia`, `weather`, `twelvedata`, `national_parks`, `lara_translate`, `e2b`, `context7`, `alchemy`, `weights_and_biases`, `huggingface`
 
 ---
 
@@ -346,7 +346,7 @@ Supported MCP servers for local sandboxing (typically stateless or local-only se
 
 **Type:** `string` (enum)
 
-**Values:** `filesystem`, `git`, `terminal`, `desktop-commander`, `arxiv`, `excel`, `word`, `powerpoint`, `code-executor`, `code-runner`, `pdf-tools`, `google_cloud`, `poste_email_toolathlon`
+**Values:** `filesystem`, `git`, `terminal`, `desktop-commander`, `arxiv`, `excel`, `word`, `powerpoint`, `code-executor`, `code-runner`, `pdf-tools`, `google_cloud`, `poste_email_toolathlon`, `localmemory`
 
 ---
 

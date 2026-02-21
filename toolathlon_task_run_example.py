@@ -72,7 +72,7 @@ LOCAL_SANDBOX_SERVERS = {
     "filesystem", "git", "terminal", "desktop-commander",
     "arxiv", "excel", "word", "powerpoint",
     "code-executor", "code-runner", "pdf-tools",
-    "google_cloud", "poste_email_toolathlon",
+    "google_cloud", "poste_email_toolathlon", "localmemory",
 }
 
 TASK_TO_LOCAL_SANDBOX_NAME = {
@@ -80,13 +80,13 @@ TASK_TO_LOCAL_SANDBOX_NAME = {
     "pptx": "powerpoint",
     "arxiv_local": "arxiv",
     "emails": "poste_email_toolathlon",
+    "memory": "localmemory",
 }
 
 TASK_SERVER_TO_SANDBOX_NAME = {
     "arxiv-latex": "arxiv_latex",
     "google_sheet": "google_sheets",
     "wandb": "weights_and_biases",
-    "memory": "localmemory",
 }
 
 SANDBOX_AUTH_ENV_MAPPING = {
