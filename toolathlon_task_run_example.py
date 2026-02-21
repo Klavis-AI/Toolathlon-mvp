@@ -450,6 +450,17 @@ def run_preprocess(task: dict, auth_env: Optional[Dict[str, str]] = None) -> Opt
 
     print(f"{_CYAN}[preprocess]{_RST} Running {preprocess_main.relative_to(TASKS_DIR)} \u2026")
     tmp = tempfile.mkdtemp(prefix="preprocess_ws_")
+
+    initial_ws = TASKS_DIR / task["name"] / "initial_workspace"
+    if initial_ws.exists() and initial_ws.is_dir():
+        for item in initial_ws.iterdir():
+            dest = Path(tmp) / item.name
+            if item.is_dir():
+                shutil.copytree(str(item), str(dest), dirs_exist_ok=True)
+            else:
+                shutil.copy2(str(item), str(dest))
+        print(f"{_CYAN}[preprocess]{_RST} Copied initial_workspace into temp dir")
+
     env = _build_subprocess_env(auth_env)
     try:
         rc = subprocess.run(
@@ -484,7 +495,8 @@ def evaluate(task: dict, workspace_path: str, auth_env: Optional[Dict[str, str]]
         spec = importlib.util.spec_from_file_location("check_local", str(check_local))
         mod = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(mod)
-        return mod.check_file_structure(workspace_path)
+        if hasattr(mod, "check_file_structure"):
+            return mod.check_file_structure(workspace_path)
 
     eval_main = eval_dir / "main.py"
     if eval_main.exists():

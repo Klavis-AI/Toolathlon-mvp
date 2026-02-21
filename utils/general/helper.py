@@ -4,7 +4,12 @@ Only includes functions needed by task preprocess/evaluation scripts.
 """
 import json
 import os
+import re
 import asyncio
+
+
+def normalize_str(xstring):
+    return re.sub(r'[^\w]', '', xstring).lower().strip()
 
 
 def read_json(json_file_path):
