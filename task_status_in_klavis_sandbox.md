@@ -85,7 +85,7 @@ These 4 tasks can be executed right now via `toolathlon_task_run_example.py`:
 
 ## Unsupported Tasks
 
-These tasks require MCP servers not yet available in the Klavis sandbox platform.
+These tasks require MCP servers that are excluded, thus these tasks are not suported.
 
 | # | Task Name | MCP Servers |
 |---|-----------|-------------|
