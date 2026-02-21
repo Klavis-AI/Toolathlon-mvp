@@ -291,6 +291,19 @@ This means:
 - **No keep-alive or SSE streaming session is needed.** You do not need to maintain a WebSocket, hold open an SSE connection, or implement reconnection logic. Simply send a request and receive a response.
 - **No session state on the transport layer.** The server URL you receive from Klavis is self-contained. You can call it from any HTTP client at any time during the sandbox's lifetime.
 
+**Sample usage with the MCP Python SDK — each snippet is a standalone, stateless call:**
+
+```python
+from mcp.client.streamable_http import streamable_http_client
+from mcp import ClientSession
+
+# Each call opens a short-lived HTTP request — no persistent connection needed
+async with streamable_http_client(mcp_url) as (r, w, _):
+    async with ClientSession(r, w) as session:
+        await session.initialize()
+        tools = await session.list_tools()   # or call tool
+```
+
 ---
 
 ### Server Name Mappings
