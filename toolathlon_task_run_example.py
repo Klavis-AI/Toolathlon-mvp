@@ -23,7 +23,7 @@ from typing import Dict, Optional, List
 
 import httpx
 from dotenv import load_dotenv
-from agents import Agent, Runner
+from agents import Agent, Runner, RunHooks
 from agents.mcp import MCPServerManager, MCPServerStreamableHttp
 
 PROJECT_ROOT = Path(__file__).resolve().parent
@@ -43,6 +43,29 @@ _DIM = "\033[2m"
 _RST = "\033[0m"
 
 KLAVIS_API_BASE = "https://api.klavis.ai"
+
+# ========================== Tool Call Logging Hooks ==========================
+
+class ToolLoggingHooks(RunHooks):
+    """RunHooks subclass that prints every tool call request and response in real time."""
+
+    async def on_tool_end(self, context, agent, tool, result) -> None:
+        result_str = str(result)
+        truncated = result_str[:1000] + (" …(truncated)" if len(result_str) > 1000 else "")
+        print(f"{_GREEN}[tool result]{_RST} {_YELLOW}{tool.name}{_RST}")
+        print(f"  {_DIM}{truncated}{_RST}")
+
+    async def on_llm_end(self, context, agent, response) -> None:
+        """Print tool call arguments from the LLM response as soon as they arrive."""
+        for output in response.output:
+            name = getattr(output, 'name', None)
+            arguments = getattr(output, 'arguments', None)
+            if name and arguments is not None:
+                args_str = str(arguments)
+                truncated_args = args_str[:500] + (' …' if len(args_str) > 500 else '')
+                print(f"{_CYAN}[tool request]{_RST} {_YELLOW}{name}{_RST}")
+                print(f"  {_DIM}arguments: {truncated_args}{_RST}")
+
 
 LOCAL_SANDBOX_SERVERS = {
     "filesystem", "git", "terminal", "desktop-commander",
@@ -99,6 +122,7 @@ class KlavisSandbox:
             raise ValueError("KLAVIS_API_KEY is required")
         self.acquired_sandboxes: List[Dict] = []
         self.local_sandbox_id: Optional[str] = None
+        self.auth_env: Dict[str, str] = {}
 
     @staticmethod
     def _to_local_sandbox_name(task_name: str) -> str:
@@ -193,14 +217,14 @@ class KlavisSandbox:
         return overrides
 
     def _apply_sandbox_auth(self, server_name: str, sandbox_id: str):
-        """Fetch auth_data from Klavis sandbox and inject as env vars."""
+        """Fetch auth_data from Klavis sandbox and store in self.auth_env."""
         mapping = SANDBOX_AUTH_ENV_MAPPING.get(server_name)
         if not mapping:
             return
         auth = (self.get_sandbox_details(server_name, sandbox_id) or {}).get("auth_data", {})
         for key, env_var in mapping.items():
             if (val := auth.get(key)) is not None:
-                os.environ[env_var] = str(val)
+                self.auth_env[env_var] = str(val)
                 print(f"[Klavis] Set {env_var}")
 
     def get_sandbox_details(self, server_name: str, sandbox_id: str) -> Optional[Dict]:
@@ -396,6 +420,8 @@ def load_task(task_name: str) -> dict:
 
     needed_servers = config.get("needed_mcp_servers") or config.get("mcp_servers_required", [])
 
+    groundtruth_ws = task_dir / "groundtruth_workspace"
+
     return {
         "name": task_name,
         "needed_servers": needed_servers,
@@ -403,21 +429,32 @@ def load_task(task_name: str) -> dict:
         "system_prompt": system_prompt,
         "tarball": str(tarball) if tarball.exists() else None,
         "eval_dir": task_dir / "evaluation",
+        "groundtruth_workspace": str(groundtruth_ws) if groundtruth_ws.exists() else None,
     }
 
 
-def run_preprocess(task: dict) -> Optional[str]:
+def _build_subprocess_env(auth_env: Optional[Dict[str, str]] = None) -> Dict[str, str]:
+    """Build a subprocess env dict with PYTHONPATH and optional auth vars."""
+    env = os.environ.copy()
+    env["PYTHONPATH"] = str(PROJECT_ROOT) + os.pathsep + env.get("PYTHONPATH", "")
+    if auth_env:
+        env.update(auth_env)
+    return env
+
+
+def run_preprocess(task: dict, auth_env: Optional[Dict[str, str]] = None) -> Optional[str]:
     """Run ``preprocess/main.py`` if present; return tarball path for upload."""
     preprocess_main = TASKS_DIR / task["name"] / "preprocess" / "main.py"
     if not preprocess_main.exists():
         return task.get("tarball")
 
-    print(f"{_CYAN}[preprocess]{_RST} Running {preprocess_main.relative_to(TASKS_DIR)} …")
+    print(f"{_CYAN}[preprocess]{_RST} Running {preprocess_main.relative_to(TASKS_DIR)} \u2026")
     tmp = tempfile.mkdtemp(prefix="preprocess_ws_")
+    env = _build_subprocess_env(auth_env)
     try:
         rc = subprocess.run(
             [sys.executable, str(preprocess_main), "--agent_workspace", tmp],
-            cwd=str(preprocess_main.parent), timeout=300,
+            cwd=str(preprocess_main.parent), timeout=300, env=env,
         ).returncode
         if rc != 0:
             print(f"{_RED}[preprocess]{_RST} exited with code {rc}")
@@ -438,7 +475,7 @@ def run_preprocess(task: dict) -> Optional[str]:
         shutil.rmtree(tmp, ignore_errors=True)
 
 
-def evaluate(task: dict, workspace_path: str) -> bool:
+def evaluate(task: dict, workspace_path: str, auth_env: Optional[Dict[str, str]] = None) -> bool:
     """Try check_local.py first, then evaluation/main.py as a module."""
     eval_dir = task["eval_dir"]
 
@@ -455,11 +492,18 @@ def evaluate(task: dict, workspace_path: str) -> bool:
         created = not init.exists()
         if created:
             init.write_text("")
+        env = _build_subprocess_env(auth_env)
         try:
+            cmd = [
+                sys.executable, "-m", f"{eval_dir.name}.main",
+                "--agent_workspace", workspace_path,
+            ]
+            if task.get("groundtruth_workspace"):
+                cmd += ["--groundtruth_workspace", task["groundtruth_workspace"]]
             return subprocess.run(
-                [sys.executable, "-m", f"{eval_dir.name}.main",
-                 "--agent_workspace", workspace_path],
+                cmd,
                 cwd=str(TASKS_DIR / task["name"]),
+                env=env,
             ).returncode == 0
         finally:
             if created:
@@ -497,7 +541,7 @@ async def run_task(
         print(f"  {_YELLOW}Needed/Required MCP Servers:       \033[94m{task['needed_servers']}{_RST}")
         print(f"  {_YELLOW}Actually Connected Klavis Servers: {_GREEN}{list(server_urls.keys())}{_RST}")
 
-        tarball = run_preprocess(task)
+        tarball = run_preprocess(task, auth_env=klavis.auth_env)
         if tarball and sandbox_id:
             upload_workspace_tarball(klavis, tarball)
             print_workspace_files(klavis)
@@ -525,6 +569,7 @@ async def run_task(
                 starting_agent=agent,
                 input=task["task_str"],
                 max_turns=max_turns,
+                hooks=ToolLoggingHooks(),
             )
             print(f"\n[agent] Final output:\n{result.final_output[:600]}\n")
 
@@ -537,7 +582,7 @@ async def run_task(
             download_and_print_workspace(klavis, str(ws_dir))
 
         print("\n[eval] Running evaluation …")
-        passed = evaluate(task, str(ws_dir))
+        passed = evaluate(task, str(ws_dir), auth_env=klavis.auth_env)
         print(f"\n{'='*60}")
         print(f"  Result: {'PASS ✓' if passed else 'FAIL ✗'}")
         print(f"{'='*60}")
