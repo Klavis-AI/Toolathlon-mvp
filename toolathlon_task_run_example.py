@@ -4,7 +4,7 @@ Toolathlon task runner using Klavis Sandbox + OpenAI Agents SDK.
 Usage:
     export KLAVIS_API_KEY=...
     export OPENAI_API_KEY=...
-    uv run python -m [file_path] --task [task_name]
+    python toolathlon_task_run_example.py --task [task_name]
 """
 
 import asyncio
@@ -29,7 +29,7 @@ from agents.mcp import MCPServerManager, MCPServerStreamableHttp
 PROJECT_ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
-load_dotenv(PROJECT_ROOT / "configs" / ".env")
+load_dotenv(PROJECT_ROOT / ".env")
 
 TASKS_DIR = PROJECT_ROOT
 OUTPUT_DIR = PROJECT_ROOT
