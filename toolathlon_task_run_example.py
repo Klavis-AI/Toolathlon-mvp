@@ -3,6 +3,7 @@ Toolathlon task runner using Klavis Sandbox + OpenAI Agents SDK.
 
 Usage:
     export KLAVIS_API_KEY=...
+    export ANTHROPIC_API_KEY=...
     export OPENAI_API_KEY=...
     python toolathlon_task_run_example.py --task [task_name]
 """
@@ -33,7 +34,7 @@ load_dotenv(PROJECT_ROOT / ".env")
 
 TASKS_DIR = PROJECT_ROOT
 OUTPUT_DIR = PROJECT_ROOT
-DEFAULT_MODEL = "gpt-5.2"
+DEFAULT_MODEL = "litellm/claude-sonnet-4-5-20250929"
 
 _GREEN = "\033[92m"
 _CYAN = "\033[96m"
@@ -608,7 +609,7 @@ async def run_task(
 def main():
     parser = argparse.ArgumentParser(description="Toolathlon Runner")
     parser.add_argument("--task", default="tasks/finalpool/arrange-workspace", help="Single task path under tasks/, e.g. tasks/finalpool/arrange-workspace")
-    parser.add_argument("--model", default=DEFAULT_MODEL, help="OpenAI model name")
+    parser.add_argument("--model", default=DEFAULT_MODEL, help="Model name")
     parser.add_argument("--max-turns", type=int, default=50, help="Max agent tool-call turns")
     args = parser.parse_args()
 

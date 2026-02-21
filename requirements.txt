@@ -5,3 +5,4 @@ addict
 requests
 tenacity
 Pillow
+litellm
