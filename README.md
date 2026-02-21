@@ -27,7 +27,7 @@ The runner automates the full lifecycle of a Toolathlon benchmark task:
 
 1. **Load** the task definition (prompt, system prompt, required MCP servers) from disk.
 2. **Acquire** remote sandbox environments from Klavis AI — each providing MCP tool servers (filesystem, terminal, git, etc.).
-3. **Preprocess** — run any task-specific setup scripts to prepare the initial workspace.
+3. **Preprocess** — run any task-specific setup scripts to prepare the initial workspace (needs sandbox auth credentials from step 2).
 4. **Upload** the initial workspace tarball to the remote sandbox.
 5. **Run the agent** — an LLM-powered agent uses MCP tools via the sandbox to complete the task.
 6. **Download** the resulting workspace from the sandbox.
@@ -43,11 +43,11 @@ The runner automates the full lifecycle of a Toolathlon benchmark task:
 │                     Your Machine (Local)                        │
 │                                                                 │
 │  ┌───────────────────────────────────────────────────────────┐  │
-│  │          toolathlon_task_run_example.py                    │  │
+│  │          toolathlon_task_run_example.py                   │  │
 │  │                                                           │  │
 │  │  1. load_task()          ─── reads task config & prompts  │  │
-│  │  2. run_preprocess()     ─── optional setup script        │  │
-│  │  3. KlavisSandbox        ─── acquires remote sandboxes    │  │
+│  │  2. KlavisSandbox        ─── acquires remote sandboxes    │  │
+│  │  3. run_preprocess()     ─── optional setup script        │  │
 │  │  4. upload_workspace()   ─── sends tar.gz to sandbox      │  │
 │  │  5. Agent + Runner       ─── LLM agent loop               │  │
 │  │  6. download_workspace() ─── retrieves results            │  │
@@ -218,7 +218,7 @@ Below is the detailed sequence of what `run_task()` does:
   ┌─────────────────────┐
   │  run_preprocess()   │  If preprocess/main.py exists:
   │                     │    1. Copy initial_workspace to temp dir
-  │                     │    2. Run preprocess script
+  │                     │    2. Run preprocess script (with sandbox auth env)
   │                     │    3. Re-pack as new tarball
   └──────┬──────────────┘
          ▼
