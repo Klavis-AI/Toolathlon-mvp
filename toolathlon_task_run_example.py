@@ -388,17 +388,6 @@ def print_file_tree(directory: str, label: str = "verify") -> None:
         print(f"  {_RED}[{label}]{_RST} WARNING: directory is empty!")
 
 
-def print_workspace_files(klavis: KlavisSandbox) -> None:
-    """Download workspace to a temp dir, print its contents, then discard."""
-    print(f"{_CYAN}[verify]{_RST} Listing remote workspace files …")
-    with tempfile.TemporaryDirectory() as tmpdir:
-        try:
-            download_workspace(klavis, tmpdir)
-            print_file_tree(tmpdir, label="verify")
-        except Exception as e:
-            print(f"{_RED}[verify]{_RST} Failed to list workspace: {e}")
-
-
 # ========================== Task Loading & Evaluation ==========================
 
 def load_task(task_name: str) -> dict:
@@ -557,7 +546,6 @@ async def run_task(
         tarball = run_preprocess(task, auth_env=klavis.auth_env)
         if tarball and sandbox_id:
             upload_workspace_tarball(klavis, tarball)
-            print_workspace_files(klavis)
 
         mcp_servers = [
             MCPServerStreamableHttp(
