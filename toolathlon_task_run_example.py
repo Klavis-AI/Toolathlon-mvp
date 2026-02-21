@@ -1,5 +1,5 @@
 """
-Minimum working Toolathlon task runner using Klavis Sandbox + OpenAI Agents SDK.
+Toolathlon task runner using Klavis Sandbox + OpenAI Agents SDK.
 
 Usage:
     export KLAVIS_API_KEY=...
@@ -13,6 +13,7 @@ import json
 import os
 import sys
 import shutil
+import subprocess
 import tempfile
 import tarfile
 import importlib.util
@@ -28,7 +29,7 @@ from agents.mcp import MCPServerManager, MCPServerStreamableHttp
 PROJECT_ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
-load_dotenv(PROJECT_ROOT / ".env")
+load_dotenv(PROJECT_ROOT / "configs" / ".env")
 
 TASKS_DIR = PROJECT_ROOT
 OUTPUT_DIR = PROJECT_ROOT
@@ -62,6 +63,28 @@ TASK_SERVER_TO_SANDBOX_NAME = {
     "google_sheet": "google_sheets",
     "wandb": "weights_and_biases",
     "memory": "localmemory",
+}
+
+SANDBOX_AUTH_ENV_MAPPING = {
+    "woocommerce": {
+        "consumer_key": "KLAVIS_WOOCOMMERCE_CONSUMER_KEY",
+        "consumer_secret": "KLAVIS_WOOCOMMERCE_CONSUMER_SECRET",
+        "site_url": "KLAVIS_WOOCOMMERCE_SITE_URL",
+        "admin_username": "KLAVIS_WOOCOMMERCE_ADMIN_USERNAME",
+        "admin_password": "KLAVIS_WOOCOMMERCE_ADMIN_PASSWORD",
+    },
+    "github": {
+        "access_token": "KLAVIS_GITHUB_TOKEN",
+    },
+    "snowflake": {
+        "SNOWFLAKE_ACCOUNT": "KLAVIS_SNOWFLAKE_ACCOUNT",
+        "SNOWFLAKE_WAREHOUSE": "KLAVIS_SNOWFLAKE_WAREHOUSE",
+        "SNOWFLAKE_ROLE": "KLAVIS_SNOWFLAKE_ROLE",
+        "SNOWFLAKE_USER": "KLAVIS_SNOWFLAKE_USER",
+        "SNOWFLAKE_PRIVATE_KEY": "KLAVIS_SNOWFLAKE_PRIVATE_KEY",
+        "SNOWFLAKE_DATABASE": "KLAVIS_SNOWFLAKE_DATABASE",
+        "SNOWFLAKE_SCHEMA": "KLAVIS_SNOWFLAKE_SCHEMA",
+    },
 }
 
 
@@ -164,7 +187,21 @@ class KlavisSandbox:
                     key = name if sname == sandbox_name else sname
                     overrides[key] = surl
                     print(f"[Klavis] Acquired sandbox for '{key}': {surl}")
+                sandbox_id = result.get("sandbox_id")
+                if sandbox_id:
+                    self._apply_sandbox_auth(sandbox_name, sandbox_id)
         return overrides
+
+    def _apply_sandbox_auth(self, server_name: str, sandbox_id: str):
+        """Fetch auth_data from Klavis sandbox and inject as env vars."""
+        mapping = SANDBOX_AUTH_ENV_MAPPING.get(server_name)
+        if not mapping:
+            return
+        auth = (self.get_sandbox_details(server_name, sandbox_id) or {}).get("auth_data", {})
+        for key, env_var in mapping.items():
+            if (val := auth.get(key)) is not None:
+                os.environ[env_var] = str(val)
+                print(f"[Klavis] Set {env_var}")
 
     def get_sandbox_details(self, server_name: str, sandbox_id: str) -> Optional[Dict]:
         """Get detailed information about a specific sandbox instance."""
@@ -369,17 +406,67 @@ def load_task(task_name: str) -> dict:
     }
 
 
-def evaluate(task: dict, workspace_path: str) -> bool:
-    """Dynamically load check_local.py and run evaluation."""
-    check_local_path = task["eval_dir"] / "check_local.py"
-    if not check_local_path.exists():
-        print("[eval] No check_local.py found — skipping evaluation")
-        return True
+def run_preprocess(task: dict) -> Optional[str]:
+    """Run ``preprocess/main.py`` if present; return tarball path for upload."""
+    preprocess_main = TASKS_DIR / task["name"] / "preprocess" / "main.py"
+    if not preprocess_main.exists():
+        return task.get("tarball")
 
-    spec = importlib.util.spec_from_file_location("check_local", str(check_local_path))
-    mod = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(mod)
-    return mod.check_file_structure(workspace_path)
+    print(f"{_CYAN}[preprocess]{_RST} Running {preprocess_main.relative_to(TASKS_DIR)} …")
+    tmp = tempfile.mkdtemp(prefix="preprocess_ws_")
+    try:
+        rc = subprocess.run(
+            [sys.executable, str(preprocess_main), "--agent_workspace", tmp],
+            cwd=str(preprocess_main.parent), timeout=300,
+        ).returncode
+        if rc != 0:
+            print(f"{_RED}[preprocess]{_RST} exited with code {rc}")
+        if not any(Path(tmp).iterdir()):
+            print(f"{_YELLOW}[preprocess]{_RST} No files generated")
+            return task.get("tarball")
+
+        print_file_tree(tmp, label="preprocess")
+        tarball = os.path.join(tempfile.gettempdir(), f"preprocess_{task['name'].replace('/', '_')}.tar.gz")
+        with tarfile.open(tarball, "w:gz") as tar:
+            for item in Path(tmp).iterdir():
+                tar.add(str(item), arcname=item.name)
+        return tarball
+    except Exception as e:
+        print(f"{_RED}[preprocess]{_RST} Failed: {e}")
+        return task.get("tarball")
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
+def evaluate(task: dict, workspace_path: str) -> bool:
+    """Try check_local.py first, then evaluation/main.py as a module."""
+    eval_dir = task["eval_dir"]
+
+    check_local = eval_dir / "check_local.py"
+    if check_local.exists():
+        spec = importlib.util.spec_from_file_location("check_local", str(check_local))
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        return mod.check_file_structure(workspace_path)
+
+    eval_main = eval_dir / "main.py"
+    if eval_main.exists():
+        init = eval_dir / "__init__.py"
+        created = not init.exists()
+        if created:
+            init.write_text("")
+        try:
+            return subprocess.run(
+                [sys.executable, "-m", f"{eval_dir.name}.main",
+                 "--agent_workspace", workspace_path],
+                cwd=str(TASKS_DIR / task["name"]),
+            ).returncode == 0
+        finally:
+            if created:
+                init.unlink(missing_ok=True)
+
+    print("[eval] No evaluation script found — skipping")
+    return True
 
 
 # ========================== Task Runner ==========================
@@ -410,12 +497,9 @@ async def run_task(
         print(f"  {_YELLOW}Needed/Required MCP Servers:       \033[94m{task['needed_servers']}{_RST}")
         print(f"  {_YELLOW}Actually Connected Klavis Servers: {_GREEN}{list(server_urls.keys())}{_RST}")
 
-        # Note: The preprocess step involves more than just uploading `/initial_workspace/` to the Klavis remote filesystem workspace.
-        # It also involves configuring the remote sandbox (e.g., creating a Notion page, setting up a WooCommerce store, creating a Snowflake DB, etc.).
-        # Since requirements vary by task, you will need to generate a specific preprocess file for each task.
-        # Here is just a simple example of `arrange-workspace` task that only need to upload the initial workspace.
-        if task["tarball"] and sandbox_id:
-            upload_workspace_tarball(klavis, task["tarball"])
+        tarball = run_preprocess(task)
+        if tarball and sandbox_id:
+            upload_workspace_tarball(klavis, tarball)
             print_workspace_files(klavis)
 
         mcp_servers = [
