@@ -6,3 +6,5 @@ requests
 tenacity
 Pillow
 litellm
+aiohttp
+beautifulsoup4

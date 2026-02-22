@@ -32,6 +32,23 @@ sys.path.insert(0, str(PROJECT_ROOT))
 
 load_dotenv(PROJECT_ROOT / ".env")
 
+# Local tools copied from Toolathlon/utils/aux_tools/ (mirrored structure), they are needed for the task to run.
+# "python_execute" is intentionally excluded (runs on Klavis sandbox instead).
+from utils.aux_tools.basic import tool_sleep, tool_done
+from utils.aux_tools.context_management_tools import context_management_tools
+from utils.aux_tools.history_tools import history_tools
+from utils.aux_tools.overlong_tool_manager import overlong_tool_tools
+from utils.aux_tools.web_search import tool_web_search
+
+LOCAL_TOOL_MAPPINGS = {
+    "sleep": tool_sleep,
+    "claim_done": tool_done,
+    "manage_context": context_management_tools,
+    "history": history_tools,
+    "handle_overlong_tool_outputs": overlong_tool_tools,
+    "web_search": tool_web_search,
+}
+
 TASKS_DIR = PROJECT_ROOT
 OUTPUT_DIR = PROJECT_ROOT
 DEFAULT_MODEL = "litellm/claude-sonnet-4-5-20250929"
@@ -409,12 +426,14 @@ def load_task(task_name: str) -> dict:
     tarball = task_dir / "initial_workspace" / "initial_workspace.tar.gz"
 
     needed_servers = config.get("needed_mcp_servers") or config.get("mcp_servers_required", [])
+    needed_local_tools = config.get("needed_local_tools", [])
 
     groundtruth_ws = task_dir / "groundtruth_workspace"
 
     return {
         "name": task_name,
         "needed_servers": needed_servers,
+        "needed_local_tools": needed_local_tools,
         "task_str": task_str,
         "system_prompt": system_prompt,
         "tarball": str(tarball) if tarball.exists() else None,
@@ -515,6 +534,23 @@ def evaluate(task: dict, workspace_path: str, auth_env: Optional[Dict[str, str]]
     return True
 
 
+# ========================== Local Tool Resolution ==========================
+
+def _resolve_local_tools(needed_local_tools: List[str]) -> list:
+    """Resolve needed_local_tools names into FunctionTool instances."""
+    tools = []
+    for name in needed_local_tools:
+        tool_or_toolset = LOCAL_TOOL_MAPPINGS.get(name)
+        if tool_or_toolset is None:
+            print(f"{_YELLOW}[local_tools]{_RST} Skipping unknown local tool: {name}")
+            continue
+        if isinstance(tool_or_toolset, list):
+            tools.extend(tool_or_toolset)
+        else:
+            tools.append(tool_or_toolset)
+    return tools
+
+
 # ========================== Task Runner ==========================
 
 async def run_task(
@@ -557,12 +593,18 @@ async def run_task(
             for name, url in server_urls.items()
         ]
 
+        local_tools = _resolve_local_tools(task.get("needed_local_tools", []))
+        if local_tools:
+            tool_names = [t.name for t in local_tools]
+            print(f"  {_YELLOW}Local tools: {_GREEN}{tool_names}{_RST}")
+
         async with MCPServerManager(mcp_servers) as manager:
             agent = Agent(
                 name="TaskAgent",
                 instructions=task["system_prompt"],
                 model=model,
                 mcp_servers=manager.active_servers,
+                tools=local_tools or [],
             )
 
             print(f"\n[agent] Running …\n")
@@ -571,6 +613,7 @@ async def run_task(
                 input=task["task_str"],
                 max_turns=max_turns,
                 hooks=ToolLoggingHooks(),
+                context={"_agent_workspace": "/data"},
             )
             print(f"\n[agent] Final output:\n{result.final_output[:600]}\n")
 
