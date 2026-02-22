@@ -2,7 +2,7 @@
 
 > **Total tasks:** 108 (from `tasks/finalpool/`)  
 > **Supported (MCP servers available):** 52 | **Not supported:** 56  
-> **Klavis sandbox ready (can directly run via `toolathlon_task_run_example.py`):** 7
+> **Klavis sandbox ready (can directly run via `toolathlon_task_run_example.py`):** 8
 
 ### Klavis Status Legend
 
@@ -28,7 +28,7 @@
 | 9 | `excel-data-transformation` | excel, filesystem, terminal | `pending` |
 | 10 | `excel-market-research` | excel, filesystem, terminal | `pending` |
 | 11 | `experiments-recordings` | notion, wandb, terminal, filesystem | `pending` |
-| 12 | `filter-low-selling-products` | woocommerce, filesystem, emails | `pending` |
+| 12 | `filter-low-selling-products` | woocommerce, filesystem, emails | **`ready`** |
 | 13 | `flagged-transactions` | google-cloud, excel, terminal, filesystem | `pending` |
 | 14 | `game-statistics` | google-cloud, terminal | `pending` |
 | 15 | `git-bug-hunt` | git, terminal, filesystem, emails | `ready` |
