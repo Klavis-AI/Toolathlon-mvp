@@ -3,9 +3,12 @@ python-dotenv
 openai-agents
 addict
 requests
+requests-oauthlib
 tenacity
 Pillow
 litellm
 aiohttp
 beautifulsoup4
 pandas
+google-auth
+google-api-python-client
