@@ -20,6 +20,7 @@ import tempfile
 import tarfile
 import importlib.util
 import argparse
+from datetime import datetime
 from pathlib import Path
 from typing import Dict, Optional, List
 
@@ -569,7 +570,7 @@ def _create_tarball_from_directory(src_dir: Path, task_name: str) -> Optional[st
     return tarball
 
 
-def run_preprocess(task: dict, auth_env: Optional[Dict[str, str]] = None) -> Optional[str]:
+def run_preprocess(task: dict, auth_env: Optional[Dict[str, str]] = None, launch_time: Optional[str] = None) -> Optional[str]:
     """Run ``preprocess/main.py`` if present; return tarball path for upload.
 
     Workspace resolution order (first match wins):
@@ -621,9 +622,12 @@ def run_preprocess(task: dict, auth_env: Optional[Dict[str, str]] = None) -> Opt
         init.write_text("")
     try:
         task_dir = TASKS_DIR / task["name"]
+        cmd = [sys.executable, "-m", f"{preprocess_dir.name}.main",
+               "--agent_workspace", tmp]
+        if launch_time:
+            cmd += ["--launch_time", launch_time]
         rc = subprocess.run(
-            [sys.executable, "-m", f"{preprocess_dir.name}.main", "--agent_workspace", tmp],
-            cwd=str(task_dir), timeout=600, env=env,
+            cmd, cwd=str(task_dir), timeout=600, env=env,
         ).returncode
         if rc != 0:
             print(f"{_RED}[preprocess]{_RST} exited with code {rc}")
@@ -646,7 +650,7 @@ def run_preprocess(task: dict, auth_env: Optional[Dict[str, str]] = None) -> Opt
         shutil.rmtree(tmp, ignore_errors=True)
 
 
-def evaluate(task: dict, workspace_path: str, auth_env: Optional[Dict[str, str]] = None) -> bool:
+def evaluate(task: dict, workspace_path: str, auth_env: Optional[Dict[str, str]] = None, launch_time: Optional[str] = None) -> bool:
     """Try check_local.py first, then evaluation/main.py as a module."""
     eval_dir = task["eval_dir"]
 
@@ -672,6 +676,8 @@ def evaluate(task: dict, workspace_path: str, auth_env: Optional[Dict[str, str]]
             ]
             if task.get("groundtruth_workspace"):
                 cmd += ["--groundtruth_workspace", task["groundtruth_workspace"]]
+            if launch_time:
+                cmd += ["--launch_time", launch_time]
             return subprocess.run(
                 cmd,
                 cwd=str(TASKS_DIR / task["name"]),
@@ -738,6 +744,8 @@ async def run_task(
         if local_tools:
             print(f"  {_YELLOW}Local Tools (non-Klavis):          {_GREEN}{[t.name for t in local_tools]}{_RST}")
 
+        launch_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
         # Build per-server MCP headers. The emails server requires an
         # x-email-config header containing the base64-encoded user credentials
         # (email, password, name) so the MCP server knows which account to use.
@@ -764,7 +772,7 @@ async def run_task(
             klavis_mcp_env[name] = entry
         klavis.auth_env["KLAVIS_MCP_SERVER_URLS"] = json.dumps(klavis_mcp_env)
 
-        tarball = run_preprocess(task, auth_env=klavis.auth_env)
+        tarball = run_preprocess(task, auth_env=klavis.auth_env, launch_time=launch_time)
         if tarball and sandbox_id:
             upload_workspace_tarball(klavis, tarball)
 
@@ -810,7 +818,7 @@ async def run_task(
             download_and_print_workspace(klavis, str(ws_dir))
 
         print("\n[eval] Running evaluation …")
-        passed = evaluate(task, str(ws_dir), auth_env=klavis.auth_env)
+        passed = evaluate(task, str(ws_dir), auth_env=klavis.auth_env, launch_time=launch_time)
         print(f"\n{'='*60}")
         print(f"  Result: {'PASS ✓' if passed else 'FAIL ✗'}")
         print(f"{'='*60}")
@@ -824,7 +832,7 @@ async def run_task(
 
 def main():
     parser = argparse.ArgumentParser(description="Toolathlon Runner")
-    parser.add_argument("--task", default="tasks/finalpool/arrange-workspace", help="Single task path under tasks/, e.g. tasks/finalpool/arrange-workspace")
+    parser.add_argument("--task", default="tasks/finalpool/landing-task-reminder", help="Single task path under tasks/, e.g. tasks/finalpool/arrange-workspace")
     parser.add_argument("--model", default=DEFAULT_MODEL, help="Model name")
     parser.add_argument("--max-turns", type=int, default=50, help="Max agent tool-call turns")
     args = parser.parse_args()
