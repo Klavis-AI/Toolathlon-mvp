@@ -107,6 +107,8 @@ TASK_SERVER_TO_SANDBOX_NAME = {
     "wandb": "weights_and_biases",
 }
 
+# Task-level token_key_session.py must use os.environ.get("KLAVIS_*") to pick up
+# these credentials, since the MVP runner injects them as env vars, not via file rewriting.
 SANDBOX_AUTH_ENV_MAPPING = {
     "woocommerce": {
         "consumer_key": "KLAVIS_WOOCOMMERCE_CONSUMER_KEY",
