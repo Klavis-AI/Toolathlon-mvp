@@ -12,3 +12,5 @@ beautifulsoup4
 pandas
 google-auth
 google-api-python-client
+gspread
+openpyxl

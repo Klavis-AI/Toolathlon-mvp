@@ -131,6 +131,13 @@ SANDBOX_AUTH_ENV_MAPPING = {
     },
 }
 
+# Servers whose auth_data contains Google OAuth credentials (token,
+# refresh_token, client_id, client_secret, scopes).  We write these to a temp
+# file and monkeypatch open() via HIJACK_GOOGLE_CREDENTIALS_PATH so that child
+# processes reading configs/google_credentials.json get the sandbox credentials.
+GOOGLE_CREDENTIALS_SERVERS = {"google_sheets", "google_forms"}
+GOOGLE_TOKEN_URI = "https://oauth2.googleapis.com/token"
+
 
 # ========================== Klavis Sandbox Client ==========================
 
@@ -144,6 +151,7 @@ class KlavisSandbox:
         self.acquired_sandboxes: List[Dict] = []
         self.local_sandbox_id: Optional[str] = None
         self.auth_env: Dict[str, str] = {}
+        self._google_creds_temp_file: Optional[str] = None
 
     @staticmethod
     def _to_local_sandbox_name(task_name: str) -> str:
@@ -249,6 +257,12 @@ class KlavisSandbox:
                 sandbox_id = result.get("sandbox_id")
                 if sandbox_id:
                     self._apply_sandbox_auth(sandbox_name, sandbox_id)
+                    # For Google OAuth servers, write auth_data to a temp file
+                    # and set HIJACK_GOOGLE_CREDENTIALS_PATH so that child
+                    # processes reading configs/google_credentials.json get the
+                    # sandbox credentials instead.
+                    if sandbox_name in GOOGLE_CREDENTIALS_SERVERS:
+                        self._apply_google_credentials(sandbox_name, sandbox_id)
         return overrides
 
     def _apply_sandbox_auth(self, server_name: str, sandbox_id: str):
@@ -261,6 +275,53 @@ class KlavisSandbox:
             if (val := auth.get(key)) is not None:
                 self.auth_env[env_var] = str(val)
                 print(f"[Klavis] Set {env_var}")
+
+    def _apply_google_credentials(self, server_name: str, sandbox_id: str):
+        """Write Google OAuth auth_data to a temp file for file-open hijacking.
+
+        The auth_data returned by Klavis for google_sheets / google_forms
+        contains token, refresh_token, client_id, client_secret, and scopes.
+        We add the constant token_uri and write the full JSON to a temp file.
+        HIJACK_GOOGLE_CREDENTIALS_PATH is set so that _socket_hijack/
+        sitecustomize.py can redirect any open("configs/google_credentials.json")
+        to this temp file.
+        """
+        details = self.get_sandbox_details(server_name, sandbox_id)
+        auth = (details or {}).get("auth_data")
+        if not auth:
+            print(f"[Klavis] No auth_data for '{server_name}' — skipping Google credentials hijack")
+            return
+
+        # Add the constant token_uri that Klavis doesn't include
+        creds = dict(auth)
+        creds.setdefault("token_uri", GOOGLE_TOKEN_URI)
+        creds.setdefault("token", creds.get("access_token", ""))
+        creds.setdefault("scopes", creds.get("scope", "").split(" "))
+
+        # Write to a dedicated temp file (delete=False so the child can read it)
+        tf = tempfile.NamedTemporaryFile(
+            mode="w", delete=False, suffix=".json", prefix="google_creds_",
+        )
+        try:
+            json.dump(creds, tf, indent=2)
+            tf.close()
+            self._google_creds_temp_file = tf.name
+            self.auth_env["HIJACK_GOOGLE_CREDENTIALS_PATH"] = tf.name
+            print(f"[Klavis] Google credentials written to temp file: {tf.name}")
+        except Exception as e:
+            tf.close()
+            os.unlink(tf.name)
+            print(f"[Klavis] Failed to write Google credentials temp file: {e}")
+
+    def cleanup_temp_files(self):
+        """Remove any temporary files created for credential hijacking."""
+        if self._google_creds_temp_file:
+            try:
+                os.unlink(self._google_creds_temp_file)
+                print(f"[Klavis] Removed temp Google credentials: {self._google_creds_temp_file}")
+            except OSError:
+                pass
+            self._google_creds_temp_file = None
 
     def get_sandbox_details(self, server_name: str, sandbox_id: str) -> Optional[Dict]:
         """Get detailed information about a specific sandbox instance."""
@@ -466,8 +527,8 @@ def load_task(task_name: str) -> dict:
 
 # Path to the _socket_hijack/ directory containing sitecustomize.py.
 # When prepended to PYTHONPATH, Python auto-imports it at startup, which
-# monkey-patches socket.getaddrinfo() to redirect localhost:1143/1587
-# to the remote IMAP/SMTP servers specified by HIJACK_* env vars.
+# monkey-patches socket.getaddrinfo() and/or builtins.open() to redirect
+# network/file access as specified by HIJACK_* env vars.
 SOCKET_HIJACK_DIR = str(PROJECT_ROOT / "_socket_hijack")
 
 
@@ -477,9 +538,12 @@ def _build_subprocess_env(auth_env: Optional[Dict[str, str]] = None) -> Dict[str
     pythonpath_parts = [str(PROJECT_ROOT)]
     if auth_env:
         env.update(auth_env)
-    # If email hijack env vars are set, prepend _socket_hijack/ so that
-    # sitecustomize.py is auto-loaded and redirects IMAP/SMTP connections.
-    if env.get("HIJACK_IMAP_HOST") or env.get("HIJACK_SMTP_HOST"):
+    # If any hijack env vars are set, prepend _socket_hijack/ so that
+    # sitecustomize.py is auto-loaded and applies the relevant monkeypatches
+    # (socket redirect for IMAP/SMTP, file-open redirect for Google creds).
+    if (env.get("HIJACK_IMAP_HOST")
+            or env.get("HIJACK_SMTP_HOST")
+            or env.get("HIJACK_GOOGLE_CREDENTIALS_PATH")):
         pythonpath_parts.insert(0, SOCKET_HIJACK_DIR)
     if env.get("PYTHONPATH"):
         pythonpath_parts.append(env["PYTHONPATH"])
@@ -737,6 +801,7 @@ async def run_task(
         return passed
 
     finally:
+        klavis.cleanup_temp_files()
         klavis.release_all()
         print("[cleanup] Sandboxes released")
 

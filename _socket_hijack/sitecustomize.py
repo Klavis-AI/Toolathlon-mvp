@@ -1,11 +1,12 @@
 """
-Auto-loaded socket hijack — redirects hardcoded localhost IMAP/SMTP to remote servers.
+Auto-loaded hijack — redirects network and file access via env-var-driven monkeypatches.
 
 HOW IT WORKS:
     Python automatically imports sitecustomize.py at startup from any directory
     on PYTHONPATH. By prepending the _socket_hijack/ directory to PYTHONPATH in
     subprocess env, this module runs before the child script starts.
 
+    SOCKET PATCH:
     It monkey-patches socket.getaddrinfo() so that:
       - localhost:1143 → HIJACK_IMAP_HOST:HIJACK_IMAP_PORT  (IMAP)
       - localhost:1587 → HIJACK_SMTP_HOST:HIJACK_SMTP_PORT  (SMTP)
@@ -14,15 +15,26 @@ HOW IT WORKS:
     Both imaplib and smtplib use socket.getaddrinfo() under the hood, so this
     catches all email connections before they're even attempted.
 
+    FILE OPEN PATCH:
+    It monkey-patches builtins.open() and io.open() so that:
+      - Any open() of a path ending with 'configs/google_credentials.json'
+        is silently redirected to the temp file path given by
+        HIJACK_GOOGLE_CREDENTIALS_PATH.
+    This lets the Klavis sandbox inject Google OAuth credentials from its
+    auth_data without writing to the shared configs/ directory.
+
 ACTIVATION:
-    Only activates if HIJACK_IMAP_HOST (or HIJACK_SMTP_HOST) is set in env.
+    Socket patch activates if HIJACK_IMAP_HOST or HIJACK_SMTP_HOST is set.
+    File-open patch activates if HIJACK_GOOGLE_CREDENTIALS_PATH is set.
     If none of the HIJACK_* env vars are present, this module does nothing.
 
 PARALLEL SAFETY:
     Each subprocess gets its own env vars → each can redirect to a different
-    remote server without conflict.
+    remote server / temp file without conflict.
 """
 
+import builtins
+import io
 import os
 import socket
 import sys
@@ -66,3 +78,30 @@ def _hijacked_getaddrinfo(host, port, family=0, type=0, proto=0, flags=0):
 
 if _any_redirect:
     socket.getaddrinfo = _hijacked_getaddrinfo
+
+
+# ---------------------------------------------------------------------------
+# File-open patch: redirect configs/google_credentials.json → temp file
+# ---------------------------------------------------------------------------
+
+_google_creds_override = os.environ.get("HIJACK_GOOGLE_CREDENTIALS_PATH")
+
+if _google_creds_override:
+    _orig_open = builtins.open
+
+    def _hijacked_open(file, *args, **kwargs):
+        """Intercept open(): swap configs/google_credentials.json to temp file."""
+        # Normalise to forward-slashes so the check works cross-platform
+        file_str = str(file).replace("\\", "/")
+        if file_str.endswith("configs/google_credentials.json"):
+            override = os.environ.get("HIJACK_GOOGLE_CREDENTIALS_PATH")
+            if override:
+                print(
+                    f"[file_hijack] Redirecting {file} -> {override}",
+                    file=sys.stderr,
+                )
+                file = override
+        return _orig_open(file, *args, **kwargs)
+
+    builtins.open = _hijacked_open
+    io.open = _hijacked_open
