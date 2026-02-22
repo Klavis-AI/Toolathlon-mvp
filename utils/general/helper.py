@@ -59,6 +59,34 @@ async def run_command(command, debug=False, show_output=False):
     return stdout_decoded, stderr_decoded, process.returncode
 
 
+def get_module_path(replace_last: str = None) -> str:
+    """
+    Get the package path (relative to the current working directory) connected with dots, optionally replace the last level.
+    - replace_last: If specified, replace the last level (usually the file name) with the value
+    """
+    import inspect
+    stack = inspect.stack()
+    target_file = None
+    for frame in stack:
+        fname = frame.filename
+        if not fname.endswith("helper.py") and fname.endswith(".py"):
+            target_file = os.path.abspath(fname)
+            break
+    if target_file is None:
+        raise RuntimeError("Cannot automatically infer target file path")
+
+    cwd = os.getcwd()
+    relative_path = os.path.relpath(target_file, cwd)
+    module_path = os.path.splitext(relative_path)[0].replace(os.sep, ".")
+
+    if replace_last is not None:
+        parts = module_path.split('.')
+        parts[-1] = replace_last
+        module_path = '.'.join(parts)
+
+    return module_path
+
+
 async def fork_repo(source_repo, target_repo, fork_default_branch_only, readonly=False):
     command = f"uv run -m utils.app_specific.github.github_delete_and_refork "
     command += f"--source_repo_name {source_repo} "

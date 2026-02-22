@@ -31,7 +31,7 @@
 | 12 | `filter-low-selling-products` | woocommerce, filesystem, emails | `pending` |
 | 13 | `flagged-transactions` | google-cloud, excel, terminal, filesystem | `pending` |
 | 14 | `game-statistics` | google-cloud, terminal | `pending` |
-| 15 | `git-bug-hunt` | git, terminal, filesystem, emails | `pending` |
+| 15 | `git-bug-hunt` | git, terminal, filesystem, emails | `ready` |
 | 16 | `git-repo` | github, filesystem, pdf-tools | `pending` |
 | 17 | `huggingface-upload` | filesystem, terminal, huggingface | `pending` |
 | 18 | `imagenet` | filesystem, pdf-tools | `pending` |
@@ -69,18 +69,6 @@
 | 50 | `woocommerce-product-recall` | woocommerce, emails, google_forms, filesystem | `pending` |
 | 51 | `woocommerce-stock-alert` | woocommerce, google_sheet, emails, filesystem | `pending` |
 | 52 | `woocommerce-update-cover` | woocommerce | **`ready`** |
-
-### Quick Reference: Ready Tasks
-
-These 5 tasks can be executed right now via `toolathlon_task_run_example.py`:
-
-| Task Name | MCP Servers |
-|-----------|-------------|
-| `sync-todo-to-readme` | git, github |
-| `woocommerce-update-cover` | woocommerce |
-| `inventory-sync` | woocommerce, filesystem |
-| `courses-ta-hws` | terminal, excel, filesystem |
-| `paper-checker` | filesystem, terminal |
 
 ---
 

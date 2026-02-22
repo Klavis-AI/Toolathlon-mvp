@@ -304,6 +304,25 @@ async with streamable_http_client(mcp_url) as (r, w, _):
         tools = await session.list_tools()   # or call tool
 ```
 
+**Email MCP server — passing credentials via custom header:**
+
+The email server requires an `x-email-config` header (base64-encoded JSON with `email`, `password`, `name`). Pass it via a pre-configured `httpx.AsyncClient`:
+
+```python
+import base64, json, httpx
+
+email_cfg = {"email": "user@mcp.com", "password": "secret", "name": "User Name"}
+headers = {"x-email-config": base64.b64encode(json.dumps(email_cfg).encode()).decode()}
+http_client = httpx.AsyncClient(headers=headers, timeout=httpx.Timeout(120))
+
+async with streamable_http_client(mcp_url, http_client=http_client) as (r, w, _):
+    async with ClientSession(r, w) as session:
+        await session.initialize()
+        result = await session.call_tool("check_connection", {})
+```
+
+> **Note:** `auth_data` from the sandbox acquire response only contains connection info (IP, SMTP/IMAP ports) — the email credentials above are user-specified.
+
 ---
 
 ### Server Name Mappings

@@ -9,6 +9,7 @@ Usage:
 """
 
 import asyncio
+import base64
 import io
 import json
 import os
@@ -220,6 +221,20 @@ class KlavisSandbox:
                         task_name = remote_to_task.get(sname, sname)
                         overrides[task_name] = surl
                         print(f"[Klavis] Acquired local sandbox server '{task_name}' (remote '{sname}'): {surl}")
+                    # Extract email server auth_data for socket hijacking.
+                    # Child scripts hardcode localhost:1143/1587 for IMAP/SMTP.
+                    # We store the real remote IP:port as HIJACK_* env vars so
+                    # that _socket_hijack/sitecustomize.py can redirect them.
+                    if sname == "poste_email_toolathlon":
+                        auth = server.get("auth_data") or {}
+                        if auth.get("imap_server"):
+                            self.auth_env["HIJACK_IMAP_HOST"] = str(auth["imap_server"])
+                            self.auth_env["HIJACK_IMAP_PORT"] = str(auth.get("imap_port", 1143))
+                            print(f"[Klavis] Email hijack: IMAP -> {auth['imap_server']}:{auth.get('imap_port', 1143)}")
+                        if auth.get("smtp_server"):
+                            self.auth_env["HIJACK_SMTP_HOST"] = str(auth["smtp_server"])
+                            self.auth_env["HIJACK_SMTP_PORT"] = str(auth.get("smtp_port", 1587))
+                            print(f"[Klavis] Email hijack: SMTP -> {auth['smtp_server']}:{auth.get('smtp_port', 1587)}")
 
         for name in other_servers:
             sandbox_name = TASK_SERVER_TO_SANDBOX_NAME.get(name, name)
@@ -430,6 +445,10 @@ def load_task(task_name: str) -> dict:
 
     groundtruth_ws = task_dir / "groundtruth_workspace"
 
+    # Load email credentials if present (used as x-email-config header for the emails MCP server)
+    emails_config_path = task_dir / "emails_config.json"
+    emails_config = json.loads(emails_config_path.read_text()) if emails_config_path.exists() else None
+
     return {
         "name": task_name,
         "needed_servers": needed_servers,
@@ -439,15 +458,30 @@ def load_task(task_name: str) -> dict:
         "tarball": str(tarball) if tarball.exists() else None,
         "eval_dir": task_dir / "evaluation",
         "groundtruth_workspace": str(groundtruth_ws) if groundtruth_ws.exists() else None,
+        "emails_config": emails_config,
     }
+
+
+# Path to the _socket_hijack/ directory containing sitecustomize.py.
+# When prepended to PYTHONPATH, Python auto-imports it at startup, which
+# monkey-patches socket.getaddrinfo() to redirect localhost:1143/1587
+# to the remote IMAP/SMTP servers specified by HIJACK_* env vars.
+SOCKET_HIJACK_DIR = str(PROJECT_ROOT / "_socket_hijack")
 
 
 def _build_subprocess_env(auth_env: Optional[Dict[str, str]] = None) -> Dict[str, str]:
     """Build a subprocess env dict with PYTHONPATH and optional auth vars."""
     env = os.environ.copy()
-    env["PYTHONPATH"] = str(PROJECT_ROOT) + os.pathsep + env.get("PYTHONPATH", "")
+    pythonpath_parts = [str(PROJECT_ROOT)]
     if auth_env:
         env.update(auth_env)
+    # If email hijack env vars are set, prepend _socket_hijack/ so that
+    # sitecustomize.py is auto-loaded and redirects IMAP/SMTP connections.
+    if env.get("HIJACK_IMAP_HOST") or env.get("HIJACK_SMTP_HOST"):
+        pythonpath_parts.insert(0, SOCKET_HIJACK_DIR)
+    if env.get("PYTHONPATH"):
+        pythonpath_parts.append(env["PYTHONPATH"])
+    env["PYTHONPATH"] = os.pathsep.join(pythonpath_parts)
     return env
 
 
@@ -583,15 +617,34 @@ async def run_task(
         if tarball and sandbox_id:
             upload_workspace_tarball(klavis, tarball)
 
-        mcp_servers = [
-            MCPServerStreamableHttp(
-                params={"url": url},
-                name=name,
-                cache_tools_list=True,
-                client_session_timeout_seconds=120,
+        # Build per-server MCP headers. The emails server requires an
+        # x-email-config header containing the base64-encoded user credentials
+        # (email, password, name) so the MCP server knows which account to use.
+        emails_config = task.get("emails_config")
+        server_headers: Dict[str, Dict[str, str]] = {}
+        if emails_config:
+            header_payload = {
+                "email": emails_config["email"],
+                "password": emails_config["password"],
+                "name": emails_config["name"],
+            }
+            email_cfg_b64 = base64.b64encode(json.dumps(header_payload).encode()).decode()
+            server_headers["emails"] = {"x-email-config": email_cfg_b64}
+            print(f"  {_YELLOW}Email config header set for: {header_payload['email']}{_RST}")
+
+        mcp_servers = []
+        for name, url in server_urls.items():
+            params: Dict = {"url": url}
+            if name in server_headers:
+                params["headers"] = server_headers[name]
+            mcp_servers.append(
+                MCPServerStreamableHttp(
+                    params=params,
+                    name=name,
+                    cache_tools_list=True,
+                    client_session_timeout_seconds=120,
+                )
             )
-            for name, url in server_urls.items()
-        ]
 
         local_tools = _resolve_local_tools(task.get("needed_local_tools", []))
         if local_tools:
