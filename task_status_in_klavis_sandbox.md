@@ -2,7 +2,7 @@
 
 > **Total tasks:** 108 (from `tasks/finalpool/`)  
 > **Supported (MCP servers available):** 52 | **Not supported:** 56  
-> **Klavis sandbox ready (can directly run via `toolathlon_task_run_example.py`):** 4
+> **Klavis sandbox ready (can directly run via `toolathlon_task_run_example.py`):** 5
 
 ### Klavis Status Legend
 
@@ -45,7 +45,7 @@
 | 26 | `nhl-b2b-analysis` | google_sheet, filesystem, terminal | `pending` |
 | 27 | `notion-hr` | filesystem, emails, notion, pdf-tools | `pending` |
 | 28 | `notion-personal-website` | filesystem, word, notion | `pending` |
-| 29 | `paper-checker` | filesystem, terminal | `pending` |
+| 29 | `paper-checker` | filesystem, terminal | **`ready`** |
 | 30 | `payable-invoice-checker` | emails, pdf-tools, filesystem, snowflake | `pending` |
 | 31 | `personal-website-construct` | memory, github | `pending` |
 | 32 | `ppt-analysis` | pptx, filesystem, pdf-tools | `pending` |
@@ -72,7 +72,7 @@
 
 ### Quick Reference: Ready Tasks
 
-These 4 tasks can be executed right now via `toolathlon_task_run_example.py`:
+These 5 tasks can be executed right now via `toolathlon_task_run_example.py`:
 
 | Task Name | MCP Servers |
 |-----------|-------------|
@@ -80,6 +80,7 @@ These 4 tasks can be executed right now via `toolathlon_task_run_example.py`:
 | `woocommerce-update-cover` | woocommerce |
 | `inventory-sync` | woocommerce, filesystem |
 | `courses-ta-hws` | terminal, excel, filesystem |
+| `paper-checker` | filesystem, terminal |
 
 ---
 
