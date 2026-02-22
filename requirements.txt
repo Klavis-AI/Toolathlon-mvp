@@ -8,3 +8,4 @@ Pillow
 litellm
 aiohttp
 beautifulsoup4
+pandas

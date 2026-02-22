@@ -485,11 +485,51 @@ def _build_subprocess_env(auth_env: Optional[Dict[str, str]] = None) -> Dict[str
     return env
 
 
+def _create_tarball_from_directory(src_dir: Path, task_name: str) -> Optional[str]:
+    """Create a tar.gz from all files in *src_dir*; return the tarball path."""
+    items = list(src_dir.iterdir())
+    if not items:
+        return None
+    tarball = os.path.join(
+        tempfile.gettempdir(),
+        f"workspace_{task_name.replace('/', '_')}.tar.gz",
+    )
+    with tarfile.open(tarball, "w:gz") as tar:
+        for item in items:
+            tar.add(str(item), arcname=item.name)
+    return tarball
+
+
 def run_preprocess(task: dict, auth_env: Optional[Dict[str, str]] = None) -> Optional[str]:
-    """Run ``preprocess/main.py`` if present; return tarball path for upload."""
+    """Run ``preprocess/main.py`` if present; return tarball path for upload.
+
+    Workspace resolution order (first match wins):
+      1. preprocess/main.py exists  → run it, tarball is built from its output.
+      2. initial_workspace.tar.gz   → use the pre-built tarball directly.
+      3. initial_workspace/ dir has raw files (e.g. PDFs) but no tar.gz and no
+         preprocess script → create a tarball on-the-fly so those files still
+         get uploaded to the Klavis sandbox.
+
+    Note: across finalpool tasks, the breakdown is:
+      - ~62 tasks have only loose files (handled by case 3)
+      - ~10 tasks have a pre-built tar.gz (handled by case 2)
+      -   2 tasks have both tar.gz + loose files (both have preprocess scripts → case 1)
+      - ~27 tasks have no initial_workspace at all (no upload needed)
+    Cases with mixed content are safe because they always have a preprocess script.
+    """
     preprocess_main = TASKS_DIR / task["name"] / "preprocess" / "main.py"
+    initial_ws = TASKS_DIR / task["name"] / "initial_workspace"
+
     if not preprocess_main.exists():
-        return task.get("tarball")
+        if task.get("tarball"):
+            return task["tarball"]
+        if initial_ws.exists() and initial_ws.is_dir() and any(initial_ws.iterdir()):
+            print(f"{_CYAN}[preprocess]{_RST} No preprocess script; creating tarball from raw initial_workspace files \u2026")
+            tarball = _create_tarball_from_directory(initial_ws, task["name"])
+            if tarball:
+                print_file_tree(str(initial_ws), label="initial_workspace")
+            return tarball
+        return None
 
     print(f"{_CYAN}[preprocess]{_RST} Running {preprocess_main.relative_to(TASKS_DIR)} \u2026")
     tmp = tempfile.mkdtemp(prefix="preprocess_ws_")

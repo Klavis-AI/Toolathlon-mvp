@@ -2,7 +2,7 @@
 
 > **Total tasks:** 108 (from `tasks/finalpool/`)  
 > **Supported (MCP servers available):** 52 | **Not supported:** 56  
-> **Klavis sandbox ready (can directly run via `toolathlon_task_run_example.py`):** 5
+> **Klavis sandbox ready (can directly run via `toolathlon_task_run_example.py`):** 6
 
 ### Klavis Status Legend
 
@@ -23,7 +23,7 @@
 | 4 | `arrange-workspace` | filesystem, terminal, pdf-tools, excel | `pending` |
 | 5 | `course-assistant` | excel, emails, filesystem, terminal | `pending` |
 | 6 | `courses-ta-hws` | terminal, excel, filesystem | **`ready`** |
-| 7 | `detect-revised-terms` | filesystem, pdf-tools | `pending` |
+| 7 | `detect-revised-terms` | filesystem, pdf-tools | **`ready`** |
 | 8 | `email-paper-homepage` | emails, github | `pending` |
 | 9 | `excel-data-transformation` | excel, filesystem, terminal | `pending` |
 | 10 | `excel-market-research` | excel, filesystem, terminal | `pending` |
