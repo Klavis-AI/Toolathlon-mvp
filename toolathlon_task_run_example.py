@@ -107,6 +107,8 @@ TASK_SERVER_TO_SANDBOX_NAME = {
     "wandb": "weights_and_biases",
 }
 
+# Task-level token_key_session.py must use os.environ.get("KLAVIS_*") to pick up
+# these credentials, since the MVP runner injects them as env vars, not via file rewriting.
 SANDBOX_AUTH_ENV_MAPPING = {
     "woocommerce": {
         "consumer_key": "KLAVIS_WOOCOMMERCE_CONSUMER_KEY",
@@ -545,10 +547,16 @@ def run_preprocess(task: dict, auth_env: Optional[Dict[str, str]] = None) -> Opt
         print(f"{_CYAN}[preprocess]{_RST} Copied initial_workspace into temp dir")
 
     env = _build_subprocess_env(auth_env)
+    preprocess_dir = preprocess_main.parent
+    init = preprocess_dir / "__init__.py"
+    created_init = not init.exists()
+    if created_init:
+        init.write_text("")
     try:
+        task_dir = TASKS_DIR / task["name"]
         rc = subprocess.run(
-            [sys.executable, str(preprocess_main), "--agent_workspace", tmp],
-            cwd=str(preprocess_main.parent), timeout=600, env=env,
+            [sys.executable, "-m", f"{preprocess_dir.name}.main", "--agent_workspace", tmp],
+            cwd=str(task_dir), timeout=600, env=env,
         ).returncode
         if rc != 0:
             print(f"{_RED}[preprocess]{_RST} exited with code {rc}")
@@ -566,6 +574,8 @@ def run_preprocess(task: dict, auth_env: Optional[Dict[str, str]] = None) -> Opt
         print(f"{_RED}[preprocess]{_RST} Failed: {e}")
         return task.get("tarball")
     finally:
+        if created_init:
+            init.unlink(missing_ok=True)
         shutil.rmtree(tmp, ignore_errors=True)
 
 
