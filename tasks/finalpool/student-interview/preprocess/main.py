@@ -11,7 +11,6 @@ import random
 random.seed(42)
 import asyncio
 from utils.app_specific.poste.email_import_utils import clear_all_email_folders
-from utils.app_specific.poste.domain_utils import get_email_domain, load_and_rewrite_json, rewrite_domain
 
 from .setup_calendar_events import setup_calendar_events
 CALENDAR_AVAILABLE = True
@@ -99,7 +98,7 @@ def load_user_emails_mapping(user_list_file):
         for row in reader:
             if row['Position'] == 'student':
                 name = row['Name']
-                email = rewrite_domain(row['email'])
+                email = row['email']
                 email_mapping[name] = email
     
     return email_mapping
@@ -122,11 +121,11 @@ def create_unified_email_list(current_time, student_emails_file, fake_emails_fil
             if not line:
                 continue
             
-            email_data = rewrite_domain(json.loads(line))
+            email_data = json.loads(line)
             sender_name = email_data.get('sender_name', 'Unknown')
             
             # Get proper email from CSV mapping
-            sender_email = email_mapping.get(sender_name, f"{sender_name.lower().replace(' ', '.')}@{get_email_domain()}")
+            sender_email = email_mapping.get(sender_name, f"{sender_name.lower().replace(' ', '.')}@mcp.com")
             
             # Process send_time - either convert placeholder or assign random time
             if 'send_time' in email_data and isinstance(email_data['send_time'], str):
@@ -164,7 +163,7 @@ def create_unified_email_list(current_time, student_emails_file, fake_emails_fil
     # 2. Load and process fake emails 
     print(f"🎲 Loading fake emails...")
     with open(fake_emails_file, 'r', encoding='utf-8') as f:
-        fake_emails = rewrite_domain(json.load(f))
+        fake_emails = json.load(f)
     
     if num_fake_emails is None:
         num_fake_emails = random.randint(50, 100)
@@ -237,7 +236,8 @@ async def main():
     base_path = Path(__file__).parent.parent
     email_config_file = base_path / "email_config.json"
     
-    email_config = load_and_rewrite_json(str(email_config_file))
+    with open(email_config_file, 'r', encoding='utf-8') as f:
+        email_config = json.load(f)
     
     print(f"📧 Using email config: {email_config['email']}")
     

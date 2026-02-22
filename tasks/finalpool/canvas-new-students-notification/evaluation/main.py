@@ -23,7 +23,6 @@ sys.path.insert(0, str(project_root))
 
 from utils.app_specific.canvas import create_canvas_evaluator
 from utils.mcp.tool_servers import MCPServerManager
-from utils.app_specific.poste.domain_utils import rewrite_domain
 
 
 
@@ -64,7 +63,7 @@ def load_student_expectations(task_dir: Path) -> dict:
     for index in existing_indices:
         if index < len(all_students):
             student = all_students[index]
-            email = rewrite_domain(student.get('email', '').strip())
+            email = student.get('email', '').strip()
             if email:
                 existing_students.append(email)
                 print(f"  {index+1:2d}. {student.get('Name', 'Unknown')} ({email})")
@@ -73,7 +72,7 @@ def load_student_expectations(task_dir: Path) -> dict:
     for index in new_student_indices:
         if index < len(all_students):
             student = all_students[index]
-            email = rewrite_domain(student.get('email', '').strip())
+            email = student.get('email', '').strip()
             if email:
                 new_students.append(email)
                 print(f"  {index+1:2d}. {student.get('Name', 'Unknown')} ({email})")
@@ -141,8 +140,7 @@ async def verify_messages_as_students(task_dir: Path, new_students_emails: list,
             agent_workspace=str(workspace),
             config_dir=str(project_root / "configs" / "mcp_servers"),
             debug=False,
-            local_token_key_session=local_token_key_session,
-            server_url_overrides=json.loads(os.environ.get("KLAVIS_MCP_SERVER_URLS", "{}"))
+            local_token_key_session=local_token_key_session
         )
 
         # Connect to canvas server
@@ -332,8 +330,7 @@ async def verify_messages_with_mcp(task_dir: Path, new_students_emails: list) ->
             agent_workspace=str(workspace),
             config_dir=str(project_root / "configs" / "mcp_servers"),
             debug=False,
-            local_token_key_session=local_token_key_session,
-            server_url_overrides=json.loads(os.environ.get("KLAVIS_MCP_SERVER_URLS", "{}"))
+            local_token_key_session=local_token_key_session
         )
 
         # Connect to canvas server
@@ -619,8 +616,7 @@ async def evaluate_canvas_notification_task(evaluator, student_expectations: dic
         agent_workspace=str(mapping_workspace),
         config_dir=str(project_root / "configs" / "mcp_servers"),
         debug=False,
-        local_token_key_session=local_token_key_session,
-        server_url_overrides=json.loads(os.environ.get("KLAVIS_MCP_SERVER_URLS", "{}"))
+        local_token_key_session=local_token_key_session
     )
 
     # Connect to canvas server for mapping

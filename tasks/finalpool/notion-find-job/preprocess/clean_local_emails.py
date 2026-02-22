@@ -1,7 +1,6 @@
 import imaplib
 import json
 import sys
-from utils.app_specific.poste.domain_utils import rewrite_domain
 
 def clean_emails(config, folders=None, clean=True):
     """
@@ -95,7 +94,7 @@ def clean_emails(config, folders=None, clean=True):
 
 # Example usage:
 if __name__ == "__main__":
-    config = rewrite_domain({
+    config = {
         "email": "rkelly27@mcp.com",
         "password": "ronald_81q2O", 
         "name": "Ronald Kelly",
@@ -103,7 +102,7 @@ if __name__ == "__main__":
         "imap_port": 1143,
         "smtp_server": "localhost",
         "smtp_port": 1587
-    })
+    }
     # To clean all default folders (INBOX, Sent, Trash, Junk, Drafts)
     clean_emails(config, clean=True)
 

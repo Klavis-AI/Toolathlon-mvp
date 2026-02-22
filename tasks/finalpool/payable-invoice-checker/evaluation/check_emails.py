@@ -17,7 +17,6 @@ import json
 from typing import List, Tuple, Dict
 from utils.general.helper import print_color
 from utils.app_specific.poste.ops import decode_email_subject, extract_email_body, check_sender_outbox
-from utils.app_specific.poste.domain_utils import get_email_domain, rewrite_domain
 
 TARGET_SUBJECT_LOWER = "process outstanding invoices"
 
@@ -34,7 +33,7 @@ def load_unpaid_invoices(groundtruth_file: str) -> Dict[str, List[str]]:
         for line in f:
             line = line.strip()
             if line:
-                invoice = rewrite_domain(json.loads(line))
+                invoice = json.loads(line)
                 if invoice.get('payment_status', {}).get('flag', 0) == 1:
                     buyer_email = invoice.get('buyer_email')
                     invoice_id = invoice.get('invoice_id')
@@ -155,8 +154,7 @@ def main(groundtruth_file: str = "./groundtruth_workspace/invoice.jsonl") -> boo
         print_color("No unpaid invoices found. Nothing to check.", "yellow")
         return True
 
-    domain = get_email_domain()
-    interference_emails = rewrite_domain({
+    interference_emails = {
         "JSmith@mcp.com",
         "MBrown@mcp.com",
         "AWilliams@mcp.com",
@@ -165,10 +163,10 @@ def main(groundtruth_file: str = "./groundtruth_workspace/invoice.jsonl") -> boo
         "KWilson@mcp.com",
         "TMiller@mcp.com",
         "SAnderson@mcp.com"
-    })
+    }
     print_color(f"Interference addresses: {sorted(interference_emails)}", "cyan")
     
-    buyer_email_configs = rewrite_domain({
+    buyer_email_configs = {
         "dcooper@mcp.com": {
             "email": "dcooper@mcp.com",
             "password": "cooper$d660s",
@@ -211,7 +209,7 @@ def main(groundtruth_file: str = "./groundtruth_workspace/invoice.jsonl") -> boo
             "imap_port": 1143,
             "use_ssl": False
         }
-    })
+    }
     
     all_passed = True
     valid_mails = []
@@ -252,13 +250,13 @@ def main(groundtruth_file: str = "./groundtruth_workspace/invoice.jsonl") -> boo
         print_color(f"  - {interference_email}", "blue")
 
     print_color(f"\nChecking sender outbox (must not send to interference)", "cyan")
-    sender_config = rewrite_domain({
+    sender_config = {
         "email": "walkera@mcp.com",
         "password": "AW0808!6v5nP",
         "imap_server": "localhost",
         "imap_port": 1143,
         "use_ssl": False
-    })
+    }
 
     outbox_passed, unexpected_sends = check_sender_outbox(sender_config, interference_emails)
 

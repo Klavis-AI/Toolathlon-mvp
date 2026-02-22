@@ -5,7 +5,6 @@ from pathlib import Path
 from typing import List, Dict, Tuple, Optional
 
 from utils.app_specific.poste.local_email_manager import LocalEmailManager
-from utils.app_specific.poste.domain_utils import rewrite_domain
 
 
 class EmailContentChecker:
@@ -39,7 +38,7 @@ class EmailContentChecker:
         """Load the expected author info"""
         try:
             with open(self.groundtruth_file, 'r', encoding='utf-8') as f:
-                return rewrite_domain(json.load(f))
+                return json.load(f)
         except Exception as e:
             print(f"❌ Failed to load expected info file: {e}")
             return {}

@@ -6,7 +6,6 @@ Initialize customer support SLA timeout monitoring system database using MCP Sno
 
 import argparse
 import asyncio
-import json
 import os
 import sys
 from datetime import datetime, timedelta
@@ -48,9 +47,8 @@ SLA_CONFIGS = {
     "basic": {"response_time_minutes": 4320, "followup_time_minutes": 4320, "priority": 1}  # 72h, 72h
 }
 
-# Real user data (regular users) — domain is resolved at runtime for multi-instance support
-from utils.app_specific.poste.domain_utils import get_email_domain as _get_domain, rewrite_domain as _rewrite
-SAMPLE_USERS = _rewrite([
+# Real user data (regular users)
+SAMPLE_USERS = [
     {"name": "Raymond Miller", "email": "raymondm@mcp.com", "service_level": "basic", "customer_manager": "dhall@mcp.com"},
     {"name": "Donald Castillo", "email": "donald_castillo@mcp.com", "service_level": "max", "customer_manager": "dhall@mcp.com"},
     {"name": "Brian Ramos", "email": "ramosb@mcp.com", "service_level": "pro", "customer_manager": "andersonp@mcp.com"},
@@ -66,13 +64,12 @@ SAMPLE_USERS = _rewrite([
     {"name": "Rebecca Hall", "email": "rebeccah@mcp.com", "service_level": "max", "customer_manager": "andersonp@mcp.com"},
     {"name": "Anna Wright", "email": "anna.wright@mcp.com", "service_level": "pro", "customer_manager": "andersonp@mcp.com"},
     {"name": "Debra Sanders", "email": "dsanders@mcp.com", "service_level": "basic", "customer_manager": "dhall@mcp.com"},
-])
+]
 
 # Customer service manager emails (selected from real emails)
-_d = _get_domain()
 SUPPORT_MANAGERS = [
-    f"dhall@{_d}",  # Daniel Hall - Senior Customer Service Manager
-    f"andersonp@{_d}"  # Pamela Anderson - Customer Success Manager
+    "dhall@mcp.com",  # Daniel Hall - Senior Customer Service Manager
+    "andersonp@mcp.com"  # Pamela Anderson - Customer Success Manager
 ]
 
 # Ticket statuses
@@ -357,8 +354,7 @@ async def initialize_database():
     mcp_manager = MCPServerManager(
         agent_workspace="./",
         config_dir="configs/mcp_servers",
-        local_token_key_session=local_token_key_session,
-        server_url_overrides=json.loads(os.environ.get("KLAVIS_MCP_SERVER_URLS", "{}"))
+        local_token_key_session=local_token_key_session
     )
     
     try:

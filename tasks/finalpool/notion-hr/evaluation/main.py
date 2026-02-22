@@ -7,7 +7,6 @@ from email.header import decode_header
 from typing import Dict, List, Tuple
 from configs.token_key_session import all_token_key_session
 from utils.general.helper import normalize_str
-from utils.app_specific.poste.domain_utils import get_email_domain, rewrite_domain, load_and_rewrite_json
 
 # Import Notion utility functions
 from utils.app_specific.notion.ops import (
@@ -101,74 +100,73 @@ def extract_candidate_information_from_database(database_entries: List[Dict]) ->
 def check_candidates_match_expected(candidates: List[Dict]) -> Tuple[bool, List[str]]:
     """Check if candidates match the expected data from the image"""
     # Expected candidates data from the image
-    domain = get_email_domain()
     expected_candidates = [
         {
             'name': 'ALICE JACKSON',
-            'email': f'alice_jackson38@{domain}',
+            'email': 'alice_jackson38@mcp.com',
             'position': 'Financial Risk Analyst',
             'highest degree': 'master',
             'school': 'Columbia Business School'
         },
         {
             'name': 'Charles Castillo',
-            'email': f'ccastillo@{domain}',
+            'email': 'ccastillo@mcp.com',
             'position': 'Research Associate',
             'highest degree': 'master',
             'school': 'Harvard Business School'
         },
         {
             'name': 'Nancy Robinson',
-            'email': f'nancyr@{domain}',
+            'email': 'nancyr@mcp.com',
             'position': 'Investment Analyst',
             'highest degree': 'master',
             'school': 'MIT Sloan School of Management'
         },
         {
             'name': 'Michael Diaz',
-            'email': f'mdiaz@{domain}',
+            'email': 'mdiaz@mcp.com',
             'position': 'Investment Analyst',
             'highest degree': 'master',
             'school': 'Rice University - Jones Graduate School of Business'
         },
         {
             'name': 'Emily James',
-            'email': f'ejames15@{domain}',
+            'email': 'ejames15@mcp.com',
             'position': 'Securities Trader',
             'highest degree': 'bachelor',
             'school': 'University of Chicago Booth School of Business'
         },
         {
             'name': 'Debra Smith',
-            'email': f'debras3@{domain}',
+            'email': 'debras3@mcp.com',
             'position': 'Securities Trader',
             'highest degree': 'master',
             'school': 'Wharton School, University of Pennsylvania'
         },
         {
             'name': 'Jeffrey Davis',
-            'email': f'jeffreyd@{domain}',
+            'email': 'jeffreyd@mcp.com',
             'position': 'Investment Analyst',
             'highest degree': 'master',
             'school': 'Stanford Graduate School of Business'
         },
         {
             'name': 'Martha Morales',
-            'email': f'moralesm@{domain}',
+            'email': 'moralesm@mcp.com',
             'position': 'Portfolio Manager',
             'highest degree': 'master',
             'school': 'University of Miami Business School'
         },
         {
             'name': 'Lisa Davis',
-            'email': f'lisad@{domain}',
+            'email': 'lisad@mcp.com',
             'position': 'Financial Risk Analyst',
             'highest degree': 'master',
             'school': 'University of Pennsylvania - Wharton School'
         },
         {
             'name': 'Angela Moore',
-            'email': f'angela_moore89@{domain}',
+            'email': 'angela_moore89@mcp.com',
             'position': 'Securities Trader',
             'highest degree': 'master',
             'school': 'Carnegie Mellon University'
@@ -277,8 +275,9 @@ def check_notion(notion_token: str = None) -> Tuple[bool, str]:
 
 def check_emails():
     """Test only the email checking functionality"""
-    # Read involved_emails.json (with domain rewriting for multi-instance support)
-    involved_emails_data = load_and_rewrite_json(involved_emails_file)
+    # Read involved_emails.json
+    with open(involved_emails_file, "r") as f:
+        involved_emails_data = json.load(f)
 
     sender = next(iter(involved_emails_data["sender"]))
     should_receive_emails = involved_emails_data["should_receive"]

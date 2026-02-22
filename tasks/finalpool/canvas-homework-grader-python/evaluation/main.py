@@ -25,7 +25,6 @@ utils_dir = toolathlon_root / "utils"
 sys.path.insert(0, str(utils_dir))
 
 from app_specific.canvas import CanvasAPI
-from app_specific.poste.domain_utils import rewrite_domain
 
 
 class HomeworkGraderEvaluator:
@@ -81,7 +80,7 @@ class HomeworkGraderEvaluator:
                     if not line:
                         continue
                     
-                    email_data = rewrite_domain(json.loads(line))
+                    email_data = json.loads(line)
                     
                     # Only process homework2 submissions (skip homework1)
                     homework_assignment = email_data.get('homework_assignment', 'homework2')
