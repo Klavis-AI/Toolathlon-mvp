@@ -577,9 +577,10 @@ def load_task(task_name: str) -> dict:
         "!!<<<<||||workspace_dir||||>>>>!!", "/data"
     )
     system_prompt += (
-        "\nWhen you believe the task is completed, "
-        "respond with a brief summary without calling any more tools."
-    )
+        "\nPlease complete the given task independently. "
+        "Do not seek confirmation or additional feedback from the user. "
+        "You should handle all situations on your own, as the user will not provide any further information."
+    ) # original Toolathlon
 
     tarball = task_dir / "initial_workspace" / "initial_workspace.tar.gz"
 
