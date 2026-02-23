@@ -2,7 +2,7 @@
 
 > **Total tasks:** 108 (from `tasks/finalpool/`)  
 > **Supported (MCP servers available):** 52 | **Not supported:** 56  
-> **Klavis sandbox ready (can directly run via `toolathlon_task_run_example.py`):** 8
+> **Klavis sandbox ready (can directly run via `toolathlon_task_run_example.py`):** 9
 
 ### Klavis Status Legend
 
@@ -37,7 +37,7 @@
 | 18 | `imagenet` | filesystem, pdf-tools | `pending` |
 | 19 | `interview-report` | filesystem, word | `pending` |
 | 20 | `inventory-sync` | woocommerce, filesystem | **`ready`** |
-| 21 | `landing-task-reminder` | emails, snowflake, pdf-tools, filesystem | `pending` |
+| 21 | `landing-task-reminder` | emails, snowflake, pdf-tools, filesystem | **`ready`** |
 | 22 | `live-transactions` | google-cloud, filesystem | `pending` |
 | 23 | `machine-operating` | google-cloud, filesystem, excel | `pending` |
 | 24 | `merge-hf-datasets` | huggingface, terminal, filesystem | `pending` |

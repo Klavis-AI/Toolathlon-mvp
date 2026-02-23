@@ -20,6 +20,7 @@ import tempfile
 import tarfile
 import importlib.util
 import argparse
+from datetime import datetime
 from pathlib import Path
 from typing import Dict, Optional, List
 
@@ -152,6 +153,7 @@ class KlavisSandbox:
         self.local_sandbox_id: Optional[str] = None
         self.auth_env: Dict[str, str] = {}
         self._google_creds_temp_file: Optional[str] = None
+        self._snowflake_key_temp_file: Optional[str] = None
 
     @staticmethod
     def _to_local_sandbox_name(task_name: str) -> str:
@@ -261,6 +263,8 @@ class KlavisSandbox:
                     # and set HIJACK_GOOGLE_CREDENTIALS_PATH so that child
                     # processes reading configs/google_credentials.json get the
                     # sandbox credentials instead.
+                    if sandbox_name == "snowflake":
+                        self._apply_snowflake_private_key()
                     if sandbox_name in GOOGLE_CREDENTIALS_SERVERS:
                         self._apply_google_credentials(sandbox_name, sandbox_id)
         return overrides
@@ -275,6 +279,25 @@ class KlavisSandbox:
             if (val := auth.get(key)) is not None:
                 self.auth_env[env_var] = str(val)
                 print(f"[Klavis] Set {env_var}")
+
+    def _apply_snowflake_private_key(self):
+        """Write SNOWFLAKE_PRIVATE_KEY to a temp file and set the PATH env var."""
+        pk = self.auth_env.get("KLAVIS_SNOWFLAKE_PRIVATE_KEY")
+        if not pk:
+            return
+        tf = tempfile.NamedTemporaryFile(
+            mode="w", delete=False, suffix=".pem", prefix="snowflake_pk_",
+        )
+        try:
+            tf.write(pk)
+            tf.close()
+            self._snowflake_key_temp_file = tf.name
+            self.auth_env["KLAVIS_SNOWFLAKE_PRIVATE_KEY_PATH"] = tf.name
+            print(f"[Klavis] Snowflake private key written to temp file: {tf.name}")
+        except Exception as e:
+            tf.close()
+            os.unlink(tf.name)
+            print(f"[Klavis] Failed to write Snowflake private key temp file: {e}")
 
     def _apply_google_credentials(self, server_name: str, sandbox_id: str):
         """Write Google OAuth auth_data to a temp file for file-open hijacking.
@@ -315,13 +338,18 @@ class KlavisSandbox:
 
     def cleanup_temp_files(self):
         """Remove any temporary files created for credential hijacking."""
-        if self._google_creds_temp_file:
-            try:
-                os.unlink(self._google_creds_temp_file)
-                print(f"[Klavis] Removed temp Google credentials: {self._google_creds_temp_file}")
-            except OSError:
-                pass
-            self._google_creds_temp_file = None
+        for attr, label in [
+            ("_google_creds_temp_file", "Google credentials"),
+            ("_snowflake_key_temp_file", "Snowflake private key"),
+        ]:
+            path = getattr(self, attr, None)
+            if path:
+                try:
+                    os.unlink(path)
+                    print(f"[Klavis] Removed temp {label}: {path}")
+                except OSError:
+                    pass
+                setattr(self, attr, None)
 
     def get_sandbox_details(self, server_name: str, sandbox_id: str) -> Optional[Dict]:
         """Get detailed information about a specific sandbox instance."""
@@ -569,7 +597,7 @@ def _create_tarball_from_directory(src_dir: Path, task_name: str) -> Optional[st
     return tarball
 
 
-def run_preprocess(task: dict, auth_env: Optional[Dict[str, str]] = None) -> Optional[str]:
+def run_preprocess(task: dict, auth_env: Optional[Dict[str, str]] = None, launch_time: Optional[str] = None) -> Optional[str]:
     """Run ``preprocess/main.py`` if present; return tarball path for upload.
 
     Workspace resolution order (first match wins):
@@ -621,9 +649,12 @@ def run_preprocess(task: dict, auth_env: Optional[Dict[str, str]] = None) -> Opt
         init.write_text("")
     try:
         task_dir = TASKS_DIR / task["name"]
+        cmd = [sys.executable, "-m", f"{preprocess_dir.name}.main",
+               "--agent_workspace", tmp]
+        if launch_time:
+            cmd += ["--launch_time", launch_time]
         rc = subprocess.run(
-            [sys.executable, "-m", f"{preprocess_dir.name}.main", "--agent_workspace", tmp],
-            cwd=str(task_dir), timeout=600, env=env,
+            cmd, cwd=str(task_dir), timeout=600, env=env,
         ).returncode
         if rc != 0:
             print(f"{_RED}[preprocess]{_RST} exited with code {rc}")
@@ -646,7 +677,7 @@ def run_preprocess(task: dict, auth_env: Optional[Dict[str, str]] = None) -> Opt
         shutil.rmtree(tmp, ignore_errors=True)
 
 
-def evaluate(task: dict, workspace_path: str, auth_env: Optional[Dict[str, str]] = None) -> bool:
+def evaluate(task: dict, workspace_path: str, auth_env: Optional[Dict[str, str]] = None, launch_time: Optional[str] = None) -> bool:
     """Try check_local.py first, then evaluation/main.py as a module."""
     eval_dir = task["eval_dir"]
 
@@ -672,6 +703,8 @@ def evaluate(task: dict, workspace_path: str, auth_env: Optional[Dict[str, str]]
             ]
             if task.get("groundtruth_workspace"):
                 cmd += ["--groundtruth_workspace", task["groundtruth_workspace"]]
+            if launch_time:
+                cmd += ["--launch_time", launch_time]
             return subprocess.run(
                 cmd,
                 cwd=str(TASKS_DIR / task["name"]),
@@ -738,6 +771,8 @@ async def run_task(
         if local_tools:
             print(f"  {_YELLOW}Local Tools (non-Klavis):          {_GREEN}{[t.name for t in local_tools]}{_RST}")
 
+        launch_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
         # Build per-server MCP headers. The emails server requires an
         # x-email-config header containing the base64-encoded user credentials
         # (email, password, name) so the MCP server knows which account to use.
@@ -764,7 +799,7 @@ async def run_task(
             klavis_mcp_env[name] = entry
         klavis.auth_env["KLAVIS_MCP_SERVER_URLS"] = json.dumps(klavis_mcp_env)
 
-        tarball = run_preprocess(task, auth_env=klavis.auth_env)
+        tarball = run_preprocess(task, auth_env=klavis.auth_env, launch_time=launch_time)
         if tarball and sandbox_id:
             upload_workspace_tarball(klavis, tarball)
 
@@ -810,7 +845,7 @@ async def run_task(
             download_and_print_workspace(klavis, str(ws_dir))
 
         print("\n[eval] Running evaluation …")
-        passed = evaluate(task, str(ws_dir), auth_env=klavis.auth_env)
+        passed = evaluate(task, str(ws_dir), auth_env=klavis.auth_env, launch_time=launch_time)
         print(f"\n{'='*60}")
         print(f"  Result: {'PASS ✓' if passed else 'FAIL ✗'}")
         print(f"{'='*60}")
@@ -824,7 +859,7 @@ async def run_task(
 
 def main():
     parser = argparse.ArgumentParser(description="Toolathlon Runner")
-    parser.add_argument("--task", default="tasks/finalpool/arrange-workspace", help="Single task path under tasks/, e.g. tasks/finalpool/arrange-workspace")
+    parser.add_argument("--task", default="tasks/finalpool/landing-task-reminder", help="Single task path under tasks/, e.g. tasks/finalpool/arrange-workspace")
     parser.add_argument("--model", default=DEFAULT_MODEL, help="Model name")
     parser.add_argument("--max-turns", type=int, default=50, help="Max agent tool-call turns")
     args = parser.parse_args()
