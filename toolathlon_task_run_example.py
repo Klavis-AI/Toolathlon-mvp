@@ -100,6 +100,7 @@ TASK_TO_LOCAL_SANDBOX_NAME = {
     "arxiv_local": "arxiv",
     "emails": "poste_email_toolathlon",
     "memory": "localmemory",
+    "google-cloud": "google_cloud",
 }
 
 TASK_SERVER_TO_SANDBOX_NAME = {
@@ -139,6 +140,12 @@ SANDBOX_AUTH_ENV_MAPPING = {
 GOOGLE_CREDENTIALS_SERVERS = {"google_sheets", "google_forms"}
 GOOGLE_TOKEN_URI = "https://oauth2.googleapis.com/token"
 
+# Servers whose auth_data contains a GCP service-account JSON key.
+# We write the key to a temp file and set HIJACK_GCP_SERVICE_ACCOUNT_PATH
+# so that child processes reading configs/gcp-service_account.keys.json
+# get the sandbox credentials via the file-open hijack.
+GCP_CREDENTIALS_SERVERS = {"google_cloud"}
+
 
 # ========================== Klavis Sandbox Client ==========================
 
@@ -154,6 +161,7 @@ class KlavisSandbox:
         self.auth_env: Dict[str, str] = {}
         self._google_creds_temp_file: Optional[str] = None
         self._snowflake_key_temp_file: Optional[str] = None
+        self._gcp_sa_temp_file: Optional[str] = None
 
     @staticmethod
     def _to_local_sandbox_name(task_name: str) -> str:
@@ -236,7 +244,7 @@ class KlavisSandbox:
                     # Extract email server auth_data for socket hijacking.
                     # Child scripts hardcode localhost:1143/1587 for IMAP/SMTP.
                     # We store the real remote IP:port as HIJACK_* env vars so
-                    # that _socket_hijack/sitecustomize.py can redirect them.
+                    # that _hijack/sitecustomize.py can redirect them.
                     if sname == "poste_email_toolathlon":
                         auth = server.get("auth_data") or {}
                         if auth.get("imap_server"):
@@ -247,6 +255,13 @@ class KlavisSandbox:
                             self.auth_env["HIJACK_SMTP_HOST"] = str(auth["smtp_server"])
                             self.auth_env["HIJACK_SMTP_PORT"] = str(auth.get("smtp_port", 1587))
                             print(f"[Klavis] Email hijack: SMTP -> {auth['smtp_server']}:{auth.get('smtp_port', 1587)}")
+                    # Extract GCP service-account auth_data for file-open hijacking.
+                    # Child preprocess/eval scripts open configs/gcp-service_account.keys.json;
+                    # we write the real credentials to a temp file and redirect via HIJACK_*.
+                    if sname in GCP_CREDENTIALS_SERVERS:
+                        auth = server.get("auth_data") or {}
+                        if auth:
+                            self._apply_gcp_credentials_from_auth(auth)
 
         for name in other_servers:
             sandbox_name = TASK_SERVER_TO_SANDBOX_NAME.get(name, name)
@@ -305,7 +320,7 @@ class KlavisSandbox:
         The auth_data returned by Klavis for google_sheets / google_forms
         contains token, refresh_token, client_id, client_secret, and scopes.
         We add the constant token_uri and write the full JSON to a temp file.
-        HIJACK_GOOGLE_CREDENTIALS_PATH is set so that _socket_hijack/
+        HIJACK_GOOGLE_CREDENTIALS_PATH is set so that _hijack/
         sitecustomize.py can redirect any open("configs/google_credentials.json")
         to this temp file.
         """
@@ -336,11 +351,35 @@ class KlavisSandbox:
             os.unlink(tf.name)
             print(f"[Klavis] Failed to write Google credentials temp file: {e}")
 
+    def _apply_gcp_credentials_from_auth(self, auth: Dict):
+        """Write GCP service-account auth_data to a temp file for file-open hijacking.
+
+        The auth_data returned by the Klavis google_cloud sandbox contains
+        the full GCP service-account JSON key.  We write it to a temp file
+        and set HIJACK_GCP_SERVICE_ACCOUNT_PATH so that _hijack/
+        sitecustomize.py redirects any open("configs/gcp-service_account.keys.json")
+        to this temp file.
+        """
+        tf = tempfile.NamedTemporaryFile(
+            mode="w", delete=False, suffix=".json", prefix="gcp_sa_",
+        )
+        try:
+            json.dump(auth, tf, indent=2)
+            tf.close()
+            self._gcp_sa_temp_file = tf.name
+            self.auth_env["HIJACK_GCP_SERVICE_ACCOUNT_PATH"] = tf.name
+            print(f"[Klavis] GCP service-account credentials written to temp file: {tf.name}")
+        except Exception as e:
+            tf.close()
+            os.unlink(tf.name)
+            print(f"[Klavis] Failed to write GCP service-account temp file: {e}")
+
     def cleanup_temp_files(self):
         """Remove any temporary files created for credential hijacking."""
         for attr, label in [
             ("_google_creds_temp_file", "Google credentials"),
             ("_snowflake_key_temp_file", "Snowflake private key"),
+            ("_gcp_sa_temp_file", "GCP service-account"),
         ]:
             path = getattr(self, attr, None)
             if path:
@@ -556,11 +595,11 @@ def load_task(task_name: str) -> dict:
     }
 
 
-# Path to the _socket_hijack/ directory containing sitecustomize.py.
+# Path to the _hijack/ directory containing sitecustomize.py.
 # When prepended to PYTHONPATH, Python auto-imports it at startup, which
 # monkey-patches socket.getaddrinfo() and/or builtins.open() to redirect
 # network/file access as specified by HIJACK_* env vars.
-SOCKET_HIJACK_DIR = str(PROJECT_ROOT / "_socket_hijack")
+SOCKET_HIJACK_DIR = str(PROJECT_ROOT / "_hijack")
 
 
 def _build_subprocess_env(auth_env: Optional[Dict[str, str]] = None) -> Dict[str, str]:
@@ -569,12 +608,13 @@ def _build_subprocess_env(auth_env: Optional[Dict[str, str]] = None) -> Dict[str
     pythonpath_parts = [str(PROJECT_ROOT)]
     if auth_env:
         env.update(auth_env)
-    # If any hijack env vars are set, prepend _socket_hijack/ so that
+    # If any hijack env vars are set, prepend _hijack/ so that
     # sitecustomize.py is auto-loaded and applies the relevant monkeypatches
     # (socket redirect for IMAP/SMTP, file-open redirect for Google creds).
     if (env.get("HIJACK_IMAP_HOST")
             or env.get("HIJACK_SMTP_HOST")
-            or env.get("HIJACK_GOOGLE_CREDENTIALS_PATH")):
+            or env.get("HIJACK_GOOGLE_CREDENTIALS_PATH")
+            or env.get("HIJACK_GCP_SERVICE_ACCOUNT_PATH")):
         pythonpath_parts.insert(0, SOCKET_HIJACK_DIR)
     if env.get("PYTHONPATH"):
         pythonpath_parts.append(env["PYTHONPATH"])
@@ -699,7 +739,7 @@ def evaluate(task: dict, workspace_path: str, auth_env: Optional[Dict[str, str]]
         try:
             cmd = [
                 sys.executable, "-m", f"{eval_dir.name}.main",
-                "--agent_workspace", workspace_path,
+                "--agent_workspace", workspace_path, "--res_log_file", str(eval_dir / "evaluation.log"),
             ]
             if task.get("groundtruth_workspace"):
                 cmd += ["--groundtruth_workspace", task["groundtruth_workspace"]]
