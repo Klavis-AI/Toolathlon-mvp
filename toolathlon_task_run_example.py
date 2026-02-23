@@ -509,7 +509,10 @@ def load_task(task_name: str) -> dict:
     groundtruth_ws = task_dir / "groundtruth_workspace"
 
     # Load email credentials if present (used as x-email-config header for the emails MCP server)
+    # Some tasks use "emails_config.json", others use "email_config.json".
     emails_config_path = task_dir / "emails_config.json"
+    if not emails_config_path.exists():
+        emails_config_path = task_dir / "email_config.json"
     emails_config = json.loads(emails_config_path.read_text()) if emails_config_path.exists() else None
 
     return {
@@ -717,15 +720,21 @@ async def run_task(
 
     klavis = KlavisSandbox()
     try:
-        server_urls = klavis.acquire_for_servers(task["needed_servers"])
+        all_requested = task["needed_servers"] + task.get("needed_local_tools", [])
+        server_urls = klavis.acquire_for_servers(all_requested)
         if not server_urls:
             print("ERROR: Failed to acquire any sandbox servers")
             return False
-
+        local_tools = _resolve_local_tools(task.get("needed_local_tools", []))
+        if local_tools:
+            tool_names = [t.name for t in local_tools]
+            print(f"  {_YELLOW}Local tools: {_GREEN}{tool_names}{_RST}")
         sandbox_id = klavis.get_local_sandbox_id()
         print(f"[sandbox] id={sandbox_id}")
-        print(f"  {_YELLOW}Needed/Required MCP Servers:       \033[94m{task['needed_servers']}{_RST}")
+        print(f"  {_YELLOW}Needed/Required MCP Servers:       \033[94m{all_requested}{_RST}")
         print(f"  {_YELLOW}Actually Connected Klavis Servers: {_GREEN}{list(server_urls.keys())}{_RST}")
+        if local_tools:
+            print(f"  {_YELLOW}Local Tools (non-Klavis):          {_GREEN}{[t.name for t in local_tools]}{_RST}")
 
         tarball = run_preprocess(task, auth_env=klavis.auth_env)
         if tarball and sandbox_id:
@@ -760,10 +769,6 @@ async def run_task(
                 )
             )
 
-        local_tools = _resolve_local_tools(task.get("needed_local_tools", []))
-        if local_tools:
-            tool_names = [t.name for t in local_tools]
-            print(f"  {_YELLOW}Local tools: {_GREEN}{tool_names}{_RST}")
 
         async with MCPServerManager(mcp_servers) as manager:
             agent = Agent(
