@@ -720,7 +720,9 @@ async def run_task(
 
     klavis = KlavisSandbox()
     try:
-        all_requested = task["needed_servers"] + task.get("needed_local_tools", [])
+        all_requested = task["needed_servers"]
+        if "python_execute" in task["needed_local_tools"]:
+            all_requested.append("code-executor")
         server_urls = klavis.acquire_for_servers(all_requested)
         if not server_urls:
             print("ERROR: Failed to acquire any sandbox servers")
