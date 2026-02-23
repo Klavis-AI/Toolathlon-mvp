@@ -18,12 +18,12 @@
 |---|-----------|-------------|:------------:|
 | 1 | `ab-testing` | google-cloud, filesystem | `ready` |
 | 2 | `academic-warning` | google-cloud, excel, filesystem | `ready` |
-| 3 | `apply-phd-email` | filesystem, memory, emails, terminal, pdf-tools | `pending` |
+| 3 | `apply-phd-email` | filesystem, memory, emails, terminal, pdf-tools | `ready` |
 | 4 | `arrange-workspace` | filesystem, terminal, pdf-tools, excel | `ready` |
 | 5 | `course-assistant` | excel, emails, filesystem, terminal | `ready` |
 | 6 | `courses-ta-hws` | terminal, excel, filesystem | `ready` |
 | 7 | `detect-revised-terms` | filesystem, pdf-tools | `ready` |
-| 8 | `email-paper-homepage` | emails, github | `pending` |
+| 8 | `email-paper-homepage` | emails, github | `ready` |
 | 9 | `excel-data-transformation` | excel, filesystem, terminal | `ready` |
 | 10 | `excel-market-research` | excel, filesystem, terminal | `ready` |
 | 11 | `experiments-recordings` | notion, wandb, terminal, filesystem | `pending` |
@@ -52,7 +52,7 @@
 | 34 | `privacy-desensitization` | filesystem, terminal | `ready` |
 | 35 | `reimbursement-form-filler` | filesystem, excel, pdf-tools, terminal | `ready` |
 | 36 | `sales-accounting` | memory, excel, filesystem | `ready` |
-| 37 | `set-conf-cr-ddl` | emails, google_calendar | `pending` |
+| 37 | `set-conf-cr-ddl` | emails, google_calendar | `ready` |
 | 38 | `sla-timeout-monitor` | emails, snowflake, filesystem, pdf-tools, terminal | `ready` |
 | 39 | `student-interview` | emails, google_calendar | `ready` |
 | 40 | `sync-todo-to-readme` | git, github | `ready` |

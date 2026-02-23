@@ -217,6 +217,16 @@ async def call_tool_with_retry(
     Raises:
         ToolCallError: If all attempts fail
     """
+    # Special handling for import_emails with import_path: the preprocess script runs
+    # locally but the email MCP server is remote, so it cannot access local file paths.
+    # Instead, we read the file contents locally and pass them as a json_string parameter.
+    if tool_name == "import_emails" and "import_path" in arguments:
+        import_path = arguments["import_path"]
+        with open(import_path, "r", encoding="utf-8") as f:
+            json_content = f.read()
+        arguments = {k: v for k, v in arguments.items() if k != "import_path"}
+        arguments["json_string"] = json_content
+
     last_exception = None
     for attempt in range(retry_time + 1):
         try:

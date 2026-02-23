@@ -18,10 +18,11 @@ A self-contained, minimal example for running [Toolathlon](https://github.com/to
   - [Server Name Mappings](#server-name-mappings)
 - [Credential Injection & Network/File Hijacking](#credential-injection--networkfile-hijacking)
   - [Why This Is Needed](#why-this-is-needed)
-  - [The Three Credential Injection Strategies](#the-three-credential-injection-strategies)
+  - [The Four Credential Injection & Adaptation Strategies](#the-four-credential-injection--adaptation-strategies)
   - [Strategy 1: Environment Variables (Direct)](#strategy-1-environment-variables-direct)
   - [Strategy 2: Network Hijack (Socket Monkeypatch)](#strategy-2-network-hijack-socket-monkeypatch)
   - [Strategy 3: File Hijack (open/stat Monkeypatch)](#strategy-3-file-hijack-openstat-monkeypatch)
+  - [Strategy 4: MCP Tool Call Adaptation (import_emails)](#strategy-4-mcp-tool-call-adaptation-import_emails)
   - [How \_build\_subprocess\_env Ties It Together](#how-_build_subprocess_env-ties-it-together)
   - [Decision Table: Which Strategy For Which Server](#decision-table-which-strategy-for-which-server)
   - [Implementing This Yourself](#implementing-this-yourself)
@@ -383,13 +384,14 @@ Toolathlon tasks were originally designed for a monolithic environment where:
 
 In the Klavis sandbox setup, each service runs **remotely** with **dynamically assigned** addresses and credentials. The runner must bridge this gap **without modifying the original task scripts**. It does this through three injection strategies:
 
-### The Three Credential Injection Strategies
+### The Four Credential Injection & Adaptation Strategies
 
 | Strategy | What it solves | Mechanism | Example servers |
 |---|---|---|---|
 | **1. Env vars** | Scripts read tokens/keys from `os.environ` | Set `KLAVIS_*` env vars before launching subprocess | github, woocommerce, snowflake |
 | **2. Network hijack** | Scripts connect to hardcoded `localhost` ports | Monkeypatch `socket.getaddrinfo()` to redirect to remote IPs | email (IMAP/SMTP) |
 | **3. File hijack** | Scripts read credentials from hardcoded file paths | Monkeypatch `builtins.open()` / `os.stat()` to redirect to temp files | google_sheets, google_forms, google_cloud |
+| **4. MCP tool call adaptation** | MCP tool expects a local file path the remote server can't access | Read file locally, pass contents as `json_string` instead of `import_path` | email (import_emails) |
 
 ### Strategy 1: Environment Variables (Direct)
 
@@ -574,7 +576,11 @@ If you are building your own Toolathlon runner (or adapting this code), here is 
    - The `_hijack/sitecustomize.py` module will auto-patch `open()`, `os.stat()`, and `pathlib.Path.stat()`.
    - **Clean up** temp files after the task completes (`cleanup_temp_files()`).
 
-> **Note:** Strategies 2 and 3 only affect **local subprocess scripts** (preprocess, evaluation). The **agent's MCP tool calls** go directly to Klavis server URLs over HTTP and don't need hijacking — credentials for those are handled by the Klavis sandbox infrastructure itself.
+4. **For MCP tool call adaptation** (email import):
+   - The `import_emails` tool expects `import_path`, but the preprocess runs locally and the email MCP server is remote — it can't access local files.
+   - `call_tool_with_retry()` in `utils/mcp/tool_servers.py` automatically reads the file locally and passes contents as `json_string` instead of `import_path`. Transparent to callers.
+
+> **Note:** Strategies 2 and 3 only affect **local subprocess scripts** (preprocess, evaluation). The **agent's MCP tool calls** go directly to Klavis server URLs over HTTP and don't need hijacking. Strategy 4 also only applies to local scripts calling remote MCP servers.
 
 ---
 
