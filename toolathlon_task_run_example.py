@@ -738,10 +738,6 @@ async def run_task(
         if local_tools:
             print(f"  {_YELLOW}Local Tools (non-Klavis):          {_GREEN}{[t.name for t in local_tools]}{_RST}")
 
-        tarball = run_preprocess(task, auth_env=klavis.auth_env)
-        if tarball and sandbox_id:
-            upload_workspace_tarball(klavis, tarball)
-
         # Build per-server MCP headers. The emails server requires an
         # x-email-config header containing the base64-encoded user credentials
         # (email, password, name) so the MCP server knows which account to use.
@@ -757,6 +753,21 @@ async def run_task(
             server_headers["emails"] = {"x-email-config": email_cfg_b64}
             print(f"  {_YELLOW}Email config header set for: {header_payload['email']}{_RST}")
 
+        # Inject KLAVIS_MCP_SERVER_URLS into auth_env so that child processes
+        # (preprocess/evaluation scripts) using utils.mcp.tool_servers can
+        # connect to Klavis MCP servers without needing YAML config files.
+        klavis_mcp_env = {}
+        for name, url in server_urls.items():
+            entry: Dict = {"url": url}
+            if name in server_headers:
+                entry["headers"] = server_headers[name]
+            klavis_mcp_env[name] = entry
+        klavis.auth_env["KLAVIS_MCP_SERVER_URLS"] = json.dumps(klavis_mcp_env)
+
+        tarball = run_preprocess(task, auth_env=klavis.auth_env)
+        if tarball and sandbox_id:
+            upload_workspace_tarball(klavis, tarball)
+
         mcp_servers = []
         for name, url in server_urls.items():
             params: Dict = {"url": url}
@@ -770,7 +781,6 @@ async def run_task(
                     client_session_timeout_seconds=120,
                 )
             )
-
 
         async with MCPServerManager(mcp_servers) as manager:
             agent = Agent(
