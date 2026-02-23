@@ -21,3 +21,5 @@ snowflake-connector-python
 cryptography
 reportlab
 rich
+notion-client
+playwright

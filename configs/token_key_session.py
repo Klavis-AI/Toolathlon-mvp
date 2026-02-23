@@ -16,6 +16,11 @@ all_token_key_session = Dict(
     github_token=os.environ.get("KLAVIS_GITHUB_TOKEN", ""),
     huggingface_token=os.environ.get("KLAVIS_HUGGINGFACE_TOKEN", ""),
 
+    notion_integration_key=os.environ.get("KLAVIS_NOTION_INTEGRATION_KEY", ""),
+    notion_integration_key_eval=os.environ.get("KLAVIS_NOTION_INTEGRATION_KEY_EVAL", ""),
+    source_notion_page_url=os.environ.get("KLAVIS_SOURCE_NOTION_PAGE_URL", ""),
+    eval_notion_page_url=os.environ.get("KLAVIS_EVAL_NOTION_PAGE_URL", ""),
+
     snowflake_account=os.environ.get("KLAVIS_SNOWFLAKE_ACCOUNT", ""),
     snowflake_warehouse=os.environ.get("KLAVIS_SNOWFLAKE_WAREHOUSE", "COMPUTE_WH"),
     snowflake_role=os.environ.get("KLAVIS_SNOWFLAKE_ROLE", "ACCOUNTADMIN"),
