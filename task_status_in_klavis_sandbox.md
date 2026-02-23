@@ -1,8 +1,7 @@
 # Toolathlon Task Status in Klavis Sandbox
 
 > **Total tasks:** 108 (from `tasks/finalpool/`)  
-> **Supported (MCP servers available):** 52 | **Not supported:** 56  
-> **Klavis sandbox ready (can directly run via `toolathlon_task_run_example.py`):** 9
+> **Supported (MCP servers available):** 52 | **Not supported:** 56
 
 ### Klavis Status Legend
 
@@ -17,58 +16,58 @@
 
 | # | Task Name | MCP Servers | Klavis Status |
 |---|-----------|-------------|:------------:|
-| 1 | `ab-testing` | google-cloud, filesystem | `pending` |
-| 2 | `academic-warning` | google-cloud, excel, filesystem | `pending` |
+| 1 | `ab-testing` | google-cloud, filesystem | `ready` |
+| 2 | `academic-warning` | google-cloud, excel, filesystem | `ready` |
 | 3 | `apply-phd-email` | filesystem, memory, emails, terminal, pdf-tools | `pending` |
-| 4 | `arrange-workspace` | filesystem, terminal, pdf-tools, excel | `pending` |
-| 5 | `course-assistant` | excel, emails, filesystem, terminal | `pending` |
-| 6 | `courses-ta-hws` | terminal, excel, filesystem | **`ready`** |
-| 7 | `detect-revised-terms` | filesystem, pdf-tools | **`ready`** |
+| 4 | `arrange-workspace` | filesystem, terminal, pdf-tools, excel | `ready` |
+| 5 | `course-assistant` | excel, emails, filesystem, terminal | `ready` |
+| 6 | `courses-ta-hws` | terminal, excel, filesystem | `ready` |
+| 7 | `detect-revised-terms` | filesystem, pdf-tools | `ready` |
 | 8 | `email-paper-homepage` | emails, github | `pending` |
-| 9 | `excel-data-transformation` | excel, filesystem, terminal | `pending` |
-| 10 | `excel-market-research` | excel, filesystem, terminal | `pending` |
+| 9 | `excel-data-transformation` | excel, filesystem, terminal | `ready` |
+| 10 | `excel-market-research` | excel, filesystem, terminal | `ready` |
 | 11 | `experiments-recordings` | notion, wandb, terminal, filesystem | `pending` |
-| 12 | `filter-low-selling-products` | woocommerce, filesystem, emails | **`ready`** |
-| 13 | `flagged-transactions` | google-cloud, excel, terminal, filesystem | `pending` |
-| 14 | `game-statistics` | google-cloud, terminal | `pending` |
+| 12 | `filter-low-selling-products` | woocommerce, filesystem, emails | `ready` |
+| 13 | `flagged-transactions` | google-cloud, excel, terminal, filesystem | `ready` |
+| 14 | `game-statistics` | google-cloud, terminal | `ready` |
 | 15 | `git-bug-hunt` | git, terminal, filesystem, emails | `ready` |
-| 16 | `git-repo` | github, filesystem, pdf-tools | `pending` |
+| 16 | `git-repo` | github, filesystem, pdf-tools | `ready` |
 | 17 | `huggingface-upload` | filesystem, terminal, huggingface | `pending` |
-| 18 | `imagenet` | filesystem, pdf-tools | `pending` |
-| 19 | `interview-report` | filesystem, word | `pending` |
-| 20 | `inventory-sync` | woocommerce, filesystem | **`ready`** |
-| 21 | `landing-task-reminder` | emails, snowflake, pdf-tools, filesystem | **`ready`** |
-| 22 | `live-transactions` | google-cloud, filesystem | `pending` |
-| 23 | `machine-operating` | google-cloud, filesystem, excel | `pending` |
+| 18 | `imagenet` | filesystem, pdf-tools | `ready` |
+| 19 | `interview-report` | filesystem, word | `ready` |
+| 20 | `inventory-sync` | woocommerce, filesystem | `ready` |
+| 21 | `landing-task-reminder` | emails, snowflake, pdf-tools, filesystem | `ready` |
+| 22 | `live-transactions` | google-cloud, filesystem | `ready` |
+| 23 | `machine-operating` | google-cloud, filesystem, excel | `ready` |
 | 24 | `merge-hf-datasets` | huggingface, terminal, filesystem | `pending` |
-| 25 | `music-analysis` | excel, google_sheet, terminal | `pending` |
-| 26 | `nhl-b2b-analysis` | google_sheet, filesystem, terminal | `pending` |
+| 25 | `music-analysis` | excel, google_sheet, terminal | `ready` |
+| 26 | `nhl-b2b-analysis` | google_sheet, filesystem, terminal | `ready` |
 | 27 | `notion-hr` | filesystem, emails, notion, pdf-tools | `pending` |
 | 28 | `notion-personal-website` | filesystem, word, notion | `pending` |
-| 29 | `paper-checker` | filesystem, terminal | **`ready`** |
-| 30 | `payable-invoice-checker` | emails, pdf-tools, filesystem, snowflake | `pending` |
-| 31 | `personal-website-construct` | memory, github | `pending` |
-| 32 | `ppt-analysis` | pptx, filesystem, pdf-tools | `pending` |
-| 33 | `price-comparison` | filesystem, terminal, pdf-tools, google-cloud | `pending` |
-| 34 | `privacy-desensitization` | filesystem, terminal | `pending` |
-| 35 | `reimbursement-form-filler` | filesystem, excel, pdf-tools, terminal | `pending` |
-| 36 | `sales-accounting` | memory, excel, filesystem | `pending` |
+| 29 | `paper-checker` | filesystem, terminal | `ready` |
+| 30 | `payable-invoice-checker` | emails, pdf-tools, filesystem, snowflake | `ready` |
+| 31 | `personal-website-construct` | memory, github | `ready` |
+| 32 | `ppt-analysis` | pptx, filesystem, pdf-tools | `ready` |
+| 33 | `price-comparison` | filesystem, terminal, pdf-tools, google-cloud | `ready` |
+| 34 | `privacy-desensitization` | filesystem, terminal | `ready` |
+| 35 | `reimbursement-form-filler` | filesystem, excel, pdf-tools, terminal | `ready` |
+| 36 | `sales-accounting` | memory, excel, filesystem | `ready` |
 | 37 | `set-conf-cr-ddl` | emails, google_calendar | `pending` |
-| 38 | `sla-timeout-monitor` | emails, snowflake, filesystem, pdf-tools, terminal | `pending` |
-| 39 | `student-interview` | emails, google_calendar | `pending` |
-| 40 | `sync-todo-to-readme` | git, github | **`ready`** |
+| 38 | `sla-timeout-monitor` | emails, snowflake, filesystem, pdf-tools, terminal | `ready` |
+| 39 | `student-interview` | emails, google_calendar | `ready` |
+| 40 | `sync-todo-to-readme` | git, github | `ready` |
 | 41 | `task-tracker` | github, notion | `pending` |
-| 42 | `travel-expense-reimbursement` | emails, snowflake, pdf-tools, filesystem | `pending` |
-| 43 | `university-course-selection` | filesystem, pdf-tools, terminal, excel | `pending` |
+| 42 | `travel-expense-reimbursement` | emails, snowflake, pdf-tools, filesystem | `ready` |
+| 43 | `university-course-selection` | filesystem, pdf-tools, terminal, excel | `ready` |
 | 44 | `update-material-inventory` | google_sheet, woocommerce | `pending` |
-| 45 | `wandb-best-score` | wandb, filesystem, terminal | `pending` |
-| 46 | `wandb-shortest-length` | wandb, filesystem, terminal, excel | `pending` |
+| 45 | `wandb-best-score` | wandb, filesystem, terminal | `ready` |
+| 46 | `wandb-shortest-length` | wandb, filesystem, terminal, excel | `ready` |
 | 47 | `woocommerce-customer-survey` | woocommerce, emails, google_forms, filesystem | `ready` |
-| 48 | `woocommerce-new-product` | woocommerce, filesystem, emails | **`ready`** |
-| 49 | `woocommerce-new-welcome` | woocommerce, filesystem, terminal, google-cloud, emails | `pending` |
+| 48 | `woocommerce-new-product` | woocommerce, filesystem, emails | `ready` |
+| 49 | `woocommerce-new-welcome` | woocommerce, filesystem, terminal, google-cloud, emails | `ready` |
 | 50 | `woocommerce-product-recall` | woocommerce, emails, google_forms, filesystem | `pending` |
 | 51 | `woocommerce-stock-alert` | woocommerce, google_sheet, emails, filesystem | `pending` |
-| 52 | `woocommerce-update-cover` | woocommerce | **`ready`** |
+| 52 | `woocommerce-update-cover` | woocommerce | `ready` |
 
 ---
 

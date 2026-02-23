@@ -427,7 +427,7 @@ def main():
     if verbose:
         print("\nStarting to send emails...\n")
     
-    sender = LocalEmailSender(args.sender, args.password, use_auth=False, verbose=verbose)
+    sender = LocalEmailSender(args.sender, args.password, use_auth=True, verbose=verbose)
     success_count, fail_count, failed_emails = sender.send_batch_emails(
         receiver_email=args.receiver,
         email_list=emails,

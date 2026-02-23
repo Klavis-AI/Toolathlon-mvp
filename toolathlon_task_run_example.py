@@ -736,10 +736,13 @@ def evaluate(task: dict, workspace_path: str, auth_env: Optional[Dict[str, str]]
         if created:
             init.write_text("")
         env = _build_subprocess_env(auth_env)
+        # Create an empty res.json because some script expect it to exist and will error if it's missing.
+        res_log_file = eval_dir / "res.json"
+        res_log_file.write_text("{}")
         try:
             cmd = [
                 sys.executable, "-m", f"{eval_dir.name}.main",
-                "--agent_workspace", workspace_path, "--res_log_file", str(eval_dir / "evaluation.log"),
+                "--agent_workspace", workspace_path, "--res_log_file", str(res_log_file),
             ]
             if task.get("groundtruth_workspace"):
                 cmd += ["--groundtruth_workspace", task["groundtruth_workspace"]]
