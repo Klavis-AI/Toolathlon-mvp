@@ -15,4 +15,13 @@ from addict import Dict
 all_token_key_session = Dict(
     github_token=os.environ.get("KLAVIS_GITHUB_TOKEN", ""),
     huggingface_token=os.environ.get("KLAVIS_HUGGINGFACE_TOKEN", ""),
+
+    snowflake_account=os.environ.get("KLAVIS_SNOWFLAKE_ACCOUNT", ""),
+    snowflake_warehouse=os.environ.get("KLAVIS_SNOWFLAKE_WAREHOUSE", "COMPUTE_WH"),
+    snowflake_role=os.environ.get("KLAVIS_SNOWFLAKE_ROLE", "ACCOUNTADMIN"),
+    snowflake_user=os.environ.get("KLAVIS_SNOWFLAKE_USER", ""),
+    snowflake_private_key_path=os.environ.get("KLAVIS_SNOWFLAKE_PRIVATE_KEY_PATH", ""),
+    snowflake_database=os.environ.get("KLAVIS_SNOWFLAKE_DATABASE", "SNOWFLAKE"),
+    snowflake_schema=os.environ.get("KLAVIS_SNOWFLAKE_SCHEMA", "PUBLIC"),
+    snowflake_op_allowed_databases="null",
 )
