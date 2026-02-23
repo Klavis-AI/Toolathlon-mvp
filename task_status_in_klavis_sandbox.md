@@ -63,7 +63,7 @@
 | 44 | `update-material-inventory` | google_sheet, woocommerce | `pending` |
 | 45 | `wandb-best-score` | wandb, filesystem, terminal | `pending` |
 | 46 | `wandb-shortest-length` | wandb, filesystem, terminal, excel | `pending` |
-| 47 | `woocommerce-customer-survey` | woocommerce, emails, google_forms, filesystem | `pending` |
+| 47 | `woocommerce-customer-survey` | woocommerce, emails, google_forms, filesystem | `ready` |
 | 48 | `woocommerce-new-product` | woocommerce, filesystem, emails | **`ready`** |
 | 49 | `woocommerce-new-welcome` | woocommerce, filesystem, terminal, google-cloud, emails | `pending` |
 | 50 | `woocommerce-product-recall` | woocommerce, emails, google_forms, filesystem | `pending` |
