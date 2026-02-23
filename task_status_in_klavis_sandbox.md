@@ -66,7 +66,7 @@
 | 48 | `woocommerce-new-product` | woocommerce, filesystem, emails | `ready` |
 | 49 | `woocommerce-new-welcome` | woocommerce, filesystem, terminal, google-cloud, emails | `ready` |
 | 50 | `woocommerce-product-recall` | woocommerce, emails, google_forms, filesystem | `pending` |
-| 51 | `woocommerce-stock-alert` | woocommerce, google_sheet, emails, filesystem | `pending` |
+| 51 | `woocommerce-stock-alert` | woocommerce, google_sheet, emails, filesystem | `ready` |
 | 52 | `woocommerce-update-cover` | woocommerce | `ready` |
 
 ---
