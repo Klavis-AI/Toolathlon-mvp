@@ -19,3 +19,4 @@ cryptography
 reportlab
 rich
 notion-client
+playwright
