@@ -130,6 +130,12 @@ SANDBOX_AUTH_ENV_MAPPING = {
         "SNOWFLAKE_DATABASE": "KLAVIS_SNOWFLAKE_DATABASE",
         "SNOWFLAKE_SCHEMA": "KLAVIS_SNOWFLAKE_SCHEMA",
     },
+    "notion": {
+        "toolathon_notion_integration_key": "KLAVIS_NOTION_INTEGRATION_KEY",
+        "toolathon_notion_integration_key_eval": "KLAVIS_NOTION_INTEGRATION_KEY_EVAL",
+        "toolathon_source_notion_page_url": "KLAVIS_SOURCE_NOTION_PAGE_URL",
+        "toolathon_eval_notion_page_url": "KLAVIS_EVAL_NOTION_PAGE_URL",
+    },
 }
 
 # Servers whose auth_data contains Google OAuth credentials (token,
@@ -270,13 +276,20 @@ class KlavisSandbox:
         return overrides
 
     def _apply_sandbox_auth(self, server_name: str, sandbox_id: str):
-        """Fetch auth_data from Klavis sandbox and store in self.auth_env."""
+        """Fetch auth_data/metadata from Klavis sandbox and store in self.auth_env.
+
+        Most servers store credentials in auth_data; Notion has extra metadata.
+        We check both so a single SANDBOX_AUTH_ENV_MAPPING works for either case.
+        """
         mapping = SANDBOX_AUTH_ENV_MAPPING.get(server_name)
         if not mapping:
             return
-        auth = (self.get_sandbox_details(server_name, sandbox_id) or {}).get("auth_data", {})
+        details = self.get_sandbox_details(server_name, sandbox_id) or {}
+        auth = details.get("auth_data") or {}
+        meta = details.get("metadata") or {}
         for key, env_var in mapping.items():
-            if (val := auth.get(key)) is not None:
+            val = auth.get(key) if auth.get(key) is not None else meta.get(key)
+            if val is not None:
                 self.auth_env[env_var] = str(val)
                 print(f"[Klavis] Set {env_var}")
 
