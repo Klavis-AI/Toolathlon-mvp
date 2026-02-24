@@ -200,19 +200,6 @@ cd Toolathlon-mvp
 # Install dependencies
 pip install -r requirements.txt
 ```
-
-**`requirements.txt` contents:**
-```
-httpx
-python-dotenv
-openai-agents
-addict
-requests
-tenacity
-Pillow
-litellm
-```
-
 ---
 
 ## Quick Start
@@ -256,13 +243,11 @@ tasks/finalpool/<task-name>/
 │   ├── agent_system_prompt.md        # System prompt template (!!<<<<||||workspace_dir||||>>>>!! → /data)
 │   ├── task_cn.md                    # (Optional) Chinese translation
 │   └── agent_system_prompt_cn.md     # (Optional) Chinese system prompt
-├── initial_workspace/
-│   └── initial_workspace.tar.gz      # Starting files uploaded to the sandbox
+├── initial_workspace/                # Starting files uploaded to the sandbox  
 ├── preprocess/
 │   └── main.py                       # (Optional) Setup script run before upload
 ├── evaluation/
 │   ├── main.py                       # Evaluation entry point
-│   └── check_local.py                # Core correctness checker
 └── groundtruth_workspace/            # (Optional) Expected outputs for evaluation
 ```
 
@@ -273,9 +258,7 @@ tasks/finalpool/<task-name>/
 | `task_config.json` | Declares `needed_mcp_servers` (list of server names the task requires) and optional metadata |
 | `docs/task.md` | The exact prompt the agent receives as its input |
 | `docs/agent_system_prompt.md` | System instructions for the agent. The placeholder `!!<<<<\|\|\|\|workspace_dir\|\|\|\|>>>>!!` is replaced with `/data` at runtime |
-| `initial_workspace/initial_workspace.tar.gz` | Archive of files that get extracted into the sandbox's `/data` directory before the agent starts |
 | `preprocess/main.py` | Optional script executed locally before upload. Receives `--agent_workspace <tmpdir>` and can modify the workspace |
-| `evaluation/check_local.py` | Defines a `check_file_structure(workspace_path)` function that returns `True`/`False` |
 | `evaluation/main.py` | CLI wrapper: `--agent_workspace <path> [--groundtruth_workspace <path>]` |
 
 ### Example `task_config.json`
