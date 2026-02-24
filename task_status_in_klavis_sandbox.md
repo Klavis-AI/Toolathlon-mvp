@@ -59,13 +59,13 @@
 | 41 | `task-tracker` | github, notion | `pending` |
 | 42 | `travel-expense-reimbursement` | emails, snowflake, pdf-tools, filesystem | `ready` |
 | 43 | `university-course-selection` | filesystem, pdf-tools, terminal, excel | `ready` |
-| 44 | `update-material-inventory` | google_sheet, woocommerce | `pending` |
+| 44 | `update-material-inventory` | google_sheet, woocommerce | `ready` |
 | 45 | `wandb-best-score` | wandb, filesystem, terminal | `ready` |
 | 46 | `wandb-shortest-length` | wandb, filesystem, terminal, excel | `ready` |
 | 47 | `woocommerce-customer-survey` | woocommerce, emails, google_forms, filesystem | `ready` |
 | 48 | `woocommerce-new-product` | woocommerce, filesystem, emails | `ready` |
 | 49 | `woocommerce-new-welcome` | woocommerce, filesystem, terminal, google-cloud, emails | `ready` |
-| 50 | `woocommerce-product-recall` | woocommerce, emails, google_forms, filesystem | `pending` |
+| 50 | `woocommerce-product-recall` | woocommerce, emails, google_forms, filesystem | `ready` |
 | 51 | `woocommerce-stock-alert` | woocommerce, google_sheet, emails, filesystem | `ready` |
 | 52 | `woocommerce-update-cover` | woocommerce | `ready` |
 
