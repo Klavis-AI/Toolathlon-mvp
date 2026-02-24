@@ -102,6 +102,27 @@ class MCPServerManager:
             if debug:
                 print(f"  - Registered server: {name} -> {url}")
 
+        # This is the official Notion MCP server that is used to duplicate pages.
+        # Task (e.g. notion_page_duplicator) references servers['notion_official']
+        # which expects tools like notion-duplicate-page / notion-move-pages that only
+        # exist on the official server at https://mcp.notion.com/mcp.
+        if "notion_official" not in self.servers:
+            notion_official_access_token = os.environ.get("KLAVIS_NOTION_OFFICIAL_MCP_ACCESS_TOKEN", "")
+            if notion_official_access_token:
+                notion_params = {
+                    "url": "https://mcp.notion.com/mcp",
+                    "headers": {"Authorization": f"Bearer {notion_official_access_token}"},
+                }
+                notion_server = MCPServerStreamableHttp(
+                    params=notion_params,
+                    name="notion_official",
+                    cache_tools_list=True,
+                    client_session_timeout_seconds=120,
+                )
+                self.servers["notion_official"] = notion_server
+                if debug:
+                    print(f"  - Registered server: notion_official -> https://mcp.notion.com/mcp")
+
     # ── Connection management ────────────────────────────────────────────
 
     async def connect_servers(
