@@ -6,26 +6,32 @@ A self-contained, minimal example for running [Toolathlon](https://github.com/to
 
 ## Table of Contents
 
-- [How It Works](#how-it-works)
-- [Architecture Diagram](#architecture-diagram)
-- [Prerequisites](#prerequisites)
-- [Installation](#installation)
-- [Quick Start](#quick-start)
-- [Task Directory Structure](#task-directory-structure)
-- [Key Concepts](#key-concepts)
-  - [Klavis Sandbox Types](#klavis-sandbox-types)
-  - [MCP Transport: Streamable HTTP](#mcp-transport-streamable-http)
-  - [Server Name Mappings](#server-name-mappings)
-- [Credential Injection & Network/File Hijacking](#credential-injection--networkfile-hijacking)
-  - [Why This Is Needed](#why-this-is-needed)
-  - [The Four Credential Injection & Adaptation Strategies](#the-four-credential-injection--adaptation-strategies)
-  - [Strategy 1: Environment Variables (Direct)](#strategy-1-environment-variables-direct)
-  - [Strategy 2: Network Hijack (Socket Monkeypatch)](#strategy-2-network-hijack-socket-monkeypatch)
-  - [Strategy 3: File Hijack (open/stat Monkeypatch)](#strategy-3-file-hijack-openstat-monkeypatch)
-  - [Strategy 4: MCP Tool Call Adaptation (import_emails)](#strategy-4-mcp-tool-call-adaptation-import_emails)
-  - [How \_build\_subprocess\_env Ties It Together](#how-_build_subprocess_env-ties-it-together)
-  - [Decision Table: Which Strategy For Which Server](#decision-table-which-strategy-for-which-server)
-  - [Implementing This Yourself](#implementing-this-yourself)
+- [Toolathlon Task Runner — Minimal Working Example](#toolathlon-task-runner--minimal-working-example)
+  - [Table of Contents](#table-of-contents)
+  - [How It Works](#how-it-works)
+  - [Architecture Diagram](#architecture-diagram)
+  - [Prerequisites](#prerequisites)
+  - [Installation](#installation)
+  - [Quick Start](#quick-start)
+    - [1. Set environment variables](#1-set-environment-variables)
+    - [2. Run a task](#2-run-a-task)
+  - [Task Directory Structure](#task-directory-structure)
+    - [Key files explained](#key-files-explained)
+    - [Example `task_config.json`](#example-task_configjson)
+  - [Key Concepts](#key-concepts)
+    - [Klavis Sandbox Types](#klavis-sandbox-types)
+    - [MCP Transport: Streamable HTTP](#mcp-transport-streamable-http)
+    - [Server Name Mappings](#server-name-mappings)
+  - [Credential Injection \& Network/File Hijacking](#credential-injection--networkfile-hijacking)
+    - [Why This Is Needed](#why-this-is-needed)
+    - [The Four Credential Injection \& Adaptation Strategies](#the-four-credential-injection--adaptation-strategies)
+    - [Strategy 1: Environment Variables (Direct)](#strategy-1-environment-variables-direct)
+    - [Strategy 2: Network Hijack (Socket Monkeypatch)](#strategy-2-network-hijack-socket-monkeypatch)
+    - [Strategy 3: File Hijack (open/stat Monkeypatch)](#strategy-3-file-hijack-openstat-monkeypatch)
+    - [How `_build_subprocess_env` Ties It Together](#how-_build_subprocess_env-ties-it-together)
+    - [Implementing This Yourself](#implementing-this-yourself)
+    - [Special Case: Handling Notion Tasks](#special-case-handling-notion-tasks)
+  - [Project Structure](#project-structure)
 
 ---
 
@@ -564,6 +570,14 @@ If you are building your own Toolathlon runner (or adapting this code), here is 
    - `call_tool_with_retry()` in `utils/mcp/tool_servers.py` automatically reads the file locally and passes contents as `json_string` instead of `import_path`. Transparent to callers.
 
 > **Note:** Strategies 2 and 3 only affect **local subprocess scripts** (preprocess, evaluation). The **agent's MCP tool calls** go directly to Klavis server URLs over HTTP and don't need hijacking. Strategy 4 also only applies to local scripts calling remote MCP servers.
+
+### Special Case: Handling Notion Tasks
+
+Toolathlon Notion tasks use a unique preprocessing approach: instead of initializing mock data from scratch, they duplicate and move existing Notion pages. In this `klavis-toolathlon` runner, this is handled seamlessly:
+
+1. **Pre-configured Accounts:** The Klavis Sandbox backend already manages the Notion account setup, integration keys, and page URLs. You do not need to perform manual Notion setup; these values are dynamically injected for use in `configs/token_key_session.py`.
+2. **Official MCP Token Extraction & Auto-Refresh:** When the runner acquires the `notion` sandbox from Klavis, it extracts the Notion access token from the returned auth data and sets it as `KLAVIS_NOTION_OFFICIAL_MCP_ACCESS_TOKEN` (`toolathlon_task_run_example.py`). Furthermore, Klavis backend has OAuth server that automatically handles token refreshing, ensuring your Notion access token is always up to date when acquire sandbox.
+3. **Direct Official Connection:** Using this token, the runner registers a `notion_official` MCP server pointing directly to `https://mcp.notion.com/mcp` (`utils/mcp/tool_servers.py`). This allows the local preprocess scripts to connect to the official Notion MCP to successfully duplicate and arrange the required pages.
 
 ---
 
