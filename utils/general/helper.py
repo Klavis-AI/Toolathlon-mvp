@@ -6,6 +6,8 @@ import json
 import os
 import re
 import asyncio
+import pickle
+import pandas as pd
 
 
 def normalize_str(xstring):
@@ -15,6 +17,26 @@ def normalize_str(xstring):
 def read_json(json_file_path):
     with open(json_file_path, "r") as f:
         return json.load(f)
+
+def read_parquet(parquet_file_path):
+    dt = pd.read_parquet(parquet_file_path)
+    # convert it into a list of dict
+    return dt.to_dict(orient="records")
+
+def read_pkl(pkl_file_path):
+    with open(pkl_file_path, "rb") as f:
+        return pickle.load(f)
+    
+def read_jsonl(jsonl_file_path):
+    s = []
+    with open(jsonl_file_path, "r") as f:
+        lines = f.readlines()
+    for line in lines:
+        linex = line.strip()
+        if linex == "":
+            continue
+        s.append(json.loads(linex))
+    return s
 
 
 def write_json(data, json_file_path, mode="w"):
@@ -97,3 +119,16 @@ async def fork_repo(source_repo, target_repo, fork_default_branch_only, readonly
         command += " --read_only"
     await run_command(command, debug=True, show_output=True)
     print_color(f"Forked repo {source_repo} to {target_repo} successfully", "green")
+
+def read_all(file_path):
+    if file_path.endswith(".jsonl"):
+        return read_jsonl(file_path)
+    elif file_path.endswith(".json"):
+        return read_json(file_path)
+    elif file_path.endswith(".parquet"):
+        return read_parquet(file_path)
+    elif file_path.endswith(".pkl"):
+        return read_pkl(file_path)
+    else:
+        with open(file_path, "r") as f:
+            return f.read()

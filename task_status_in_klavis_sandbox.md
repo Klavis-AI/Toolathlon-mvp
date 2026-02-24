@@ -32,14 +32,14 @@
 | 14 | `game-statistics` | google-cloud, terminal | `ready` |
 | 15 | `git-bug-hunt` | git, terminal, filesystem, emails | `ready` |
 | 16 | `git-repo` | github, filesystem, pdf-tools | `ready` |
-| 17 | `huggingface-upload` | filesystem, terminal, huggingface | `pending` |
+| 17 | `huggingface-upload` | filesystem, terminal, huggingface | `ready` |
 | 18 | `imagenet` | filesystem, pdf-tools | `ready` |
 | 19 | `interview-report` | filesystem, word | `ready` |
 | 20 | `inventory-sync` | woocommerce, filesystem | `ready` |
 | 21 | `landing-task-reminder` | emails, snowflake, pdf-tools, filesystem | `ready` |
 | 22 | `live-transactions` | google-cloud, filesystem | `ready` |
 | 23 | `machine-operating` | google-cloud, filesystem, excel | `ready` |
-| 24 | `merge-hf-datasets` | huggingface, terminal, filesystem | `pending` |
+| 24 | `merge-hf-datasets` | huggingface, terminal, filesystem | `ready` |
 | 25 | `music-analysis` | excel, google_sheet, terminal | `ready` |
 | 26 | `nhl-b2b-analysis` | google_sheet, filesystem, terminal | `ready` |
 | 27 | `notion-hr` | filesystem, emails, notion, pdf-tools | `pending` |

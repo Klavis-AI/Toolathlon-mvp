@@ -122,6 +122,9 @@ SANDBOX_AUTH_ENV_MAPPING = {
     "github": {
         "access_token": "KLAVIS_GITHUB_TOKEN",
     },
+    "huggingface": {
+        "access_token": "KLAVIS_HUGGINGFACE_TOKEN",
+    },
     "snowflake": {
         "SNOWFLAKE_ACCOUNT": "KLAVIS_SNOWFLAKE_ACCOUNT",
         "SNOWFLAKE_WAREHOUSE": "KLAVIS_SNOWFLAKE_WAREHOUSE",
