@@ -15,6 +15,12 @@ from typing import Dict, List, Tuple, Optional
 from email.header import decode_header
 from requests.auth import HTTPBasicAuth
 
+from google.oauth2.credentials import Credentials
+from google.auth.transport.requests import Request
+from googleapiclient.discovery import build
+
+GOOGLE_CREDENTIAL_FILE = "configs/google_credentials.json"
+
 # Add project path
 current_dir = os.path.dirname(os.path.abspath(__file__))
 task_dir = os.path.dirname(current_dir)
@@ -239,40 +245,40 @@ def check_google_forms_creation(agent_workspace: str) -> Tuple[bool, str]:
     except Exception as e:
         return False, f"Google Forms remote check error: {str(e)}"
 
+def _get_google_credentials() -> Credentials:
+    """Load Google OAuth2 credentials from the hijacked credentials file."""
+    with open(GOOGLE_CREDENTIAL_FILE, 'r') as f:
+        cred_data = json.load(f)
+
+    creds = Credentials(
+        token=cred_data.get('token'),
+        refresh_token=cred_data.get('refresh_token'),
+        token_uri=cred_data.get('token_uri'),
+        client_id=cred_data.get('client_id'),
+        client_secret=cred_data.get('client_secret'),
+        scopes=cred_data.get('scopes', [])
+    )
+
+    if creds and creds.expired and creds.refresh_token:
+        creds.refresh(Request())
+
+    return creds
+
+
 def verify_google_form_remotely(form_id: str, form_url: str) -> Tuple[bool, str]:
-    """Verify if Google Forms is accessible remotely"""
+    """Verify if a Google Form exists using the Google Forms API with credentials."""
     try:
-        # Build the test URL
-        test_url = form_url
-        if not test_url and form_id:
-            test_url = f"https://docs.google.com/forms/d/{form_id}/viewform"
-        
-        if not test_url:
-            return False, "Cannot build a valid form URL"
-            
-        response = requests.get(test_url, timeout=15, allow_redirects=True)
-        
-        if response.status_code == 200:
-            # Check the response content, ensure it is a valid Google Forms page
-            content = response.text.lower()
-            if ('google forms' in content or 'docs.google.com' in content or 
-                'form' in content and ('submit' in content)):
-                return True, f"Form can be accessed normally - {test_url}"
-            else:
-                return False, f"URL returned content is not a valid Google Forms page"
-        elif response.status_code == 404:
-            return False, f"Form does not exist or has been deleted"
-        elif response.status_code == 403:
-            return False, f"Form access denied, may require permissions"
-        else:
-            return False, f"Form access failed, status code: {response.status_code}"
-            
-    except requests.exceptions.Timeout:
-        return False, "Form access timed out"
-    except requests.exceptions.ConnectionError:
-        return False, "Network connection failed"
+        creds = _get_google_credentials()
+        service = build('forms', 'v1', credentials=creds)
+
+        form = service.forms().get(formId=form_id).execute()
+
+        form_title = form.get('info', {}).get('title', 'Untitled')
+        items = form.get('items', [])
+        return True, f"Form '{form_title}' verified via API ({len(items)} items)"
+
     except Exception as e:
-        return False, f"Remote verification error: {str(e)}"
+        return False, f"Google Forms API verification failed: {str(e)}"
 
 def check_recall_email_sending(agent_workspace: str, wc_client: WooCommerceClient) -> Tuple[bool, str]:
     """Check recall email sending"""
