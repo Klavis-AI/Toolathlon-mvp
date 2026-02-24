@@ -41,6 +41,9 @@ The runner automates the full lifecycle of a Toolathlon benchmark task:
 
 1. **Load** the task definition (prompt, system prompt, required MCP servers) from disk.
 2. **Acquire** remote sandbox environments from Klavis AI — each providing MCP tool servers (filesystem, terminal, git, etc.).
+
+> **⚠️ IMPORTANT — Log MCP Server URLs:** After acquiring all sandboxes, **always log/print every MCP server URL** returned by the Klavis API (for both Local and Individual sandboxes). These URLs are essential for debugging connectivity issues, tool call failures, and sandbox lifecycle problems. Include them in your run logs so they can be referenced later.
+
 3. **Preprocess** — run any task-specific setup scripts to prepare the initial workspace (needs sandbox auth credentials from step 2).
 4. **Upload** the initial workspace tarball to the remote sandbox.
 5. **Run the agent** — an LLM-powered agent uses MCP tools via the sandbox to complete the task.
@@ -291,6 +294,8 @@ The Klavis API provides two types of sandboxes (both expose MCP servers over **S
 | **Individual Sandbox** | `POST /sandbox/{server_name}` | A standalone MCP server instance for external services (github, woocommerce, snowflake, etc.). No shared filesystem. May return auth credentials. |
 
 The runner automatically classifies each required server:
+
+> **⚠️ Debugging Tip:** After acquiring all sandboxes, **log every MCP server URL** returned by the Klavis API. This includes URLs from both local sandbox servers and individual sandbox servers. Having these URLs in your logs is critical for diagnosing tool call failures, timeout issues, or sandbox connectivity problems during a run.
 
 ```python
 # These servers run inside a Local Sandbox (shared VM)
