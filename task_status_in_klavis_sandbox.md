@@ -26,7 +26,7 @@
 | 8 | `email-paper-homepage` | emails, github | `ready` |
 | 9 | `excel-data-transformation` | excel, filesystem, terminal | `ready` |
 | 10 | `excel-market-research` | excel, filesystem, terminal | `ready` |
-| 11 | `experiments-recordings` | notion, wandb, terminal, filesystem | `pending` |
+| 11 | `experiments-recordings` | notion, wandb, terminal, filesystem | `ready` |
 | 12 | `filter-low-selling-products` | woocommerce, filesystem, emails | `ready` |
 | 13 | `flagged-transactions` | google-cloud, excel, terminal, filesystem | `ready` |
 | 14 | `game-statistics` | google-cloud, terminal | `ready` |
@@ -42,8 +42,8 @@
 | 24 | `merge-hf-datasets` | huggingface, terminal, filesystem | `ready` |
 | 25 | `music-analysis` | excel, google_sheet, terminal | `ready` |
 | 26 | `nhl-b2b-analysis` | google_sheet, filesystem, terminal | `ready` |
-| 27 | `notion-hr` | filesystem, emails, notion, pdf-tools | `pending` |
-| 28 | `notion-personal-website` | filesystem, word, notion | `pending` |
+| 27 | `notion-hr` | filesystem, emails, notion, pdf-tools | `ready` |
+| 28 | `notion-personal-website` | filesystem, word, notion | `ready` |
 | 29 | `paper-checker` | filesystem, terminal | `ready` |
 | 30 | `payable-invoice-checker` | emails, pdf-tools, filesystem, snowflake | `ready` |
 | 31 | `personal-website-construct` | memory, github | `ready` |
@@ -56,7 +56,7 @@
 | 38 | `sla-timeout-monitor` | emails, snowflake, filesystem, pdf-tools, terminal | `ready` |
 | 39 | `student-interview` | emails, google_calendar | `ready` |
 | 40 | `sync-todo-to-readme` | git, github | `ready` |
-| 41 | `task-tracker` | github, notion | `pending` |
+| 41 | `task-tracker` | github, notion | `ready` |
 | 42 | `travel-expense-reimbursement` | emails, snowflake, pdf-tools, filesystem | `ready` |
 | 43 | `university-course-selection` | filesystem, pdf-tools, terminal, excel | `ready` |
 | 44 | `update-material-inventory` | google_sheet, woocommerce | `ready` |
