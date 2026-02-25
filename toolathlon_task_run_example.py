@@ -57,7 +57,7 @@ LOCAL_TOOL_MAPPINGS = {
 
 TASKS_DIR = PROJECT_ROOT
 OUTPUT_DIR = PROJECT_ROOT
-DEFAULT_MODEL = "litellm/claude-sonnet-4-6"
+DEFAULT_MODEL = "litellm/openrouter/anthropic/claude-sonnet-4-6"
 
 def _ansi(code: str) -> str:
     return code if sys.stdout.isatty() else ""
@@ -440,17 +440,17 @@ class KlavisSandbox:
     def release_all(self):
         """Release all acquired sandboxes."""
         headers = {"Authorization": f"Bearer {self.api_key}"}
-        if self.local_sandbox_id:
-            try:
-                resp = httpx.delete(
-                    f"{KLAVIS_API_BASE}/local-sandbox/{self.local_sandbox_id}",
-                    headers=headers, timeout=30,
-                )
-                resp.raise_for_status()
-                print(f"[Klavis] Released local sandbox '{self.local_sandbox_id}'")
-            except Exception as e:
-                print(f"[Klavis] Failed to release local sandbox '{self.local_sandbox_id}': {e}")
-            self.local_sandbox_id = None
+        # if self.local_sandbox_id:
+        #     try:
+        #         resp = httpx.delete(
+        #             f"{KLAVIS_API_BASE}/local-sandbox/{self.local_sandbox_id}",
+        #             headers=headers, timeout=30,
+        #         )
+        #         resp.raise_for_status()
+        #         print(f"[Klavis] Released local sandbox '{self.local_sandbox_id}'")
+        #     except Exception as e:
+        #         print(f"[Klavis] Failed to release local sandbox '{self.local_sandbox_id}': {e}")
+        #     self.local_sandbox_id = None
         for sandbox in self.acquired_sandboxes:
             sandbox_id = sandbox.get("sandbox_id")
             server_name = sandbox.get("server_name")
@@ -629,6 +629,32 @@ def load_task(task_name: str) -> dict:
         "groundtruth_workspace": str(groundtruth_ws) if groundtruth_ws.exists() else None,
         "emails_config": emails_config,
     }
+
+
+# The four google_cloud_allowed_* keys that tasks may set in token_key_session.py.
+_GOOGLE_CLOUD_ALLOWED_KEYS = [
+    "google_cloud_allowed_buckets",
+    "google_cloud_allowed_bigquery_datasets",
+    "google_cloud_allowed_log_buckets",
+    "google_cloud_allowed_instances",
+]
+
+
+def _load_google_cloud_config(task_dir: Path) -> Optional[Dict[str, str]]:
+    """Execute the task's token_key_session.py and extract google_cloud_allowed_* values."""
+    tks_path = task_dir / "token_key_session.py"
+    if not tks_path.exists():
+        return None
+    try:
+        spec = importlib.util.spec_from_file_location("_tks", tks_path)
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        session = getattr(mod, "all_token_key_session", {})
+        cfg = {k: str(session[k]) for k in _GOOGLE_CLOUD_ALLOWED_KEYS if k in session}
+        return cfg or None
+    except Exception as e:
+        print(f"{_YELLOW}[warn] Failed to load google_cloud config from {tks_path}: {e}{_RST}")
+        return None
 
 
 # Path to the _hijack/ directory containing sitecustomize.py.
@@ -902,6 +928,33 @@ async def run_task(
         tarball = run_preprocess(task, auth_env=klavis.auth_env, launch_time=launch_time)
         if tarball and sandbox_id:
             upload_workspace_tarball(klavis, tarball)
+        
+        # After preprocess, some tasks (e.g. nhl-b2b-analysis) write a Google
+        # Drive folder_id to files/folder_id.txt.  Pass it as a header to the
+        # google_sheet MCP server so it knows which folder to operate on.
+        folder_id_file = TASKS_DIR / task["name"] / "files" / "folder_id.txt"
+        if folder_id_file.exists() and "google_sheet" in server_urls:
+            folder_id = folder_id_file.read_text().strip()
+            server_headers.setdefault("google_sheet", {})["x-sheets-folder-id"] = folder_id
+            # Also update KLAVIS_MCP_SERVER_URLS so eval/child processes see the header.
+            klavis_mcp_env = json.loads(klavis.auth_env.get("KLAVIS_MCP_SERVER_URLS", "{}"))
+            if "google_sheet" in klavis_mcp_env:
+                klavis_mcp_env["google_sheet"].setdefault("headers", {})["x-sheets-folder-id"] = folder_id
+                klavis.auth_env["KLAVIS_MCP_SERVER_URLS"] = json.dumps(klavis_mcp_env)
+            print(f"  {_YELLOW}Google Sheets folder_id header set: {folder_id}{_RST}")
+
+        # google-cloud: pass allowed resource headers (buckets, bigquery, etc.)
+        # Loaded after preprocess because some values come from files it generates.
+        gc_config = _load_google_cloud_config(TASKS_DIR / task["name"])
+        if gc_config and "google-cloud" in server_urls:
+            gc_headers = {f"x-{k.replace('_', '-')}": v for k, v in gc_config.items()}
+            server_headers.setdefault("google-cloud", {}).update(gc_headers)
+            # Update KLAVIS_MCP_SERVER_URLS so eval/child processes see the headers.
+            klavis_mcp_env = json.loads(klavis.auth_env.get("KLAVIS_MCP_SERVER_URLS", "{}"))
+            if "google-cloud" in klavis_mcp_env:
+                klavis_mcp_env["google-cloud"].setdefault("headers", {}).update(gc_headers)
+                klavis.auth_env["KLAVIS_MCP_SERVER_URLS"] = json.dumps(klavis_mcp_env)
+            print(f"  {_YELLOW}Google Cloud headers set: {list(gc_headers.keys())}{_RST}")
 
         mcp_servers = []
         for name, url in server_urls.items():
