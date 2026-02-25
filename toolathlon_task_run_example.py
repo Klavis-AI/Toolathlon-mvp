@@ -12,6 +12,7 @@ import asyncio
 import base64
 import io
 import json
+import logging
 import os
 import signal
 import sys
@@ -35,6 +36,8 @@ sys.path.insert(0, str(PROJECT_ROOT))
 
 load_dotenv(PROJECT_ROOT / ".env")
 
+logging.getLogger("openai.agents").setLevel(logging.CRITICAL) # Suppress OpenAI Agents SDK logging, this is non-fatal.
+
 # Local tools copied from Toolathlon/utils/aux_tools/ (mirrored structure), they are needed for the task to run.
 # "python_execute" is intentionally excluded (runs on Klavis sandbox instead).
 from utils.aux_tools.basic import tool_sleep, tool_done
@@ -54,7 +57,7 @@ LOCAL_TOOL_MAPPINGS = {
 
 TASKS_DIR = PROJECT_ROOT
 OUTPUT_DIR = PROJECT_ROOT
-DEFAULT_MODEL = "litellm/claude-sonnet-4-6"
+DEFAULT_MODEL = "litellm/openrouter/anthropic/claude-sonnet-4-6"
 
 def _ansi(code: str) -> str:
     return code if sys.stdout.isatty() else ""
@@ -714,6 +717,12 @@ def run_preprocess(task: dict, auth_env: Optional[Dict[str, str]] = None, launch
                 shutil.copy2(str(item), str(dest))
         print(f"{_CYAN}[preprocess]{_RST} Copied initial_workspace into temp dir")
 
+    # Copy task-root files.tar.gz into the temp dir if the preprocess expects it there.
+    task_root_tar = TASKS_DIR / task["name"] / "files.tar.gz"
+    if task_root_tar.exists() and not (Path(tmp) / "files.tar.gz").exists():
+        shutil.copy2(str(task_root_tar), str(Path(tmp) / "files.tar.gz"))
+        print(f"{_CYAN}[preprocess]{_RST} Copied task-root files.tar.gz into temp dir")
+
     env = _build_subprocess_env(auth_env)
     preprocess_dir = preprocess_main.parent
     init = preprocess_dir / "__init__.py"
@@ -1052,7 +1061,7 @@ def _get_all_ready_tasks() -> List[str]:
 async def run_tasks_parallel(
     task_names: List[str],
     model: str = DEFAULT_MODEL,
-    max_turns: int = 50,
+    max_turns: int = 100,
     max_parallel: int = 10,
     log_dir: str = "logs",
 ) -> Dict[str, Optional[bool]]:
@@ -1228,7 +1237,7 @@ examples:
     parser.add_argument("--all", action="store_true",
                         help="Run all 52 supported tasks in parallel (this is the default when no --task/--tasks given)")
     parser.add_argument("--model", default=DEFAULT_MODEL, help="Model name")
-    parser.add_argument("--max-turns", type=int, default=50, help="Max agent tool-call turns")
+    parser.add_argument("--max-turns", type=int, default=100, help="Max agent tool-call turns")
     parser.add_argument("--parallel", type=int, default=10,
                         help="Max number of tasks to run concurrently (default: 10)")
     parser.add_argument("--log-dir", default="logs",
