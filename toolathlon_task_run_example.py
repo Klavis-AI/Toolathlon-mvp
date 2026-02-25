@@ -57,7 +57,7 @@ LOCAL_TOOL_MAPPINGS = {
 
 TASKS_DIR = PROJECT_ROOT
 OUTPUT_DIR = PROJECT_ROOT
-DEFAULT_MODEL = "litellm/openrouter/anthropic/claude-sonnet-4-6"
+DEFAULT_MODEL = "litellm/claude-sonnet-4-6"
 
 def _ansi(code: str) -> str:
     return code if sys.stdout.isatty() else ""
@@ -780,7 +780,7 @@ def evaluate(task: dict, workspace_path: str, auth_env: Optional[Dict[str, str]]
         env = _build_subprocess_env(auth_env)
         # Create an empty res.json because some script expect it to exist and will error if it's missing.
         res_log_file = eval_dir / "res.json"
-        res_log_file.write_text("{}")
+        res_log_file.write_text('{"messages": []}')
         try:
             cmd = [
                 sys.executable, "-m", f"{eval_dir.name}.main",
@@ -871,7 +871,7 @@ async def run_task(
         if local_tools:
             print(f"  {_YELLOW}Local Tools (non-Klavis):          {_GREEN}{[t.name for t in local_tools]}{_RST}")
 
-        launch_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        launch_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S %A")
 
         # Build per-server MCP headers. The emails server requires an
         # x-email-config header containing the base64-encoded user credentials
