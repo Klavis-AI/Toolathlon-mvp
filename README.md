@@ -34,6 +34,15 @@ A self-contained, minimal example for running [Toolathlon](https://github.com/to
     - [Implementing This Yourself](#implementing-this-yourself)
     - [Special Case: Handling Notion Tasks](#special-case-handling-notion-tasks)
   - [Project Structure](#project-structure)
+  - [Agent Framework \& Customization](#agent-framework--customization)
+
+---
+
+## Agent Framework & Customization
+
+This repository uses the [OpenAI Agents SDK](https://github.com/openai/openai-agents-python) as its default agent orchestration layer for convenience. **Nothing in the benchmark depends on this SDK** — it is a reference implementation that you should replace with your own agent infrastructure.
+
+To swap in your own framework, replace the agent execution step (step 5 in [How It Works](#how-it-works)): substitute the `Runner.run()` / `Agent()` calls with your own agent loop. Any framework that can call MCP tools over Streamable HTTP will work (LangChain, LlamaIndex, AutoGen, custom implementations, etc.). All other pipeline components — sandbox lifecycle, credential injection, evaluation — are framework-agnostic and remain unchanged.
 
 ---
 
