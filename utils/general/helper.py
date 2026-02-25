@@ -5,6 +5,7 @@ Only includes functions needed by task preprocess/evaluation scripts.
 import json
 import os
 import re
+import sys
 import asyncio
 import pickle
 import pandas as pd
@@ -53,12 +54,16 @@ def print_color(text, color="yellow", end='\n'):
         'blue': '\033[94m', 'magenta': '\033[95m', 'cyan': '\033[96m', 'white': '\033[97m',
     }
     reset_code = '\033[0m'
+    use_color = sys.stdout.isatty()
     if color.lower() not in color_codes:
         print(f"Unsupported color: {color}. Using default.", end='')
         print(text, end=end)
     else:
-        color_code = color_codes[color.lower()]
-        print(f"{color_code}{text}{reset_code}", end=end)
+        if use_color:
+            color_code = color_codes[color.lower()]
+            print(f"{color_code}{text}{reset_code}", end=end)
+        else:
+            print(text, end=end)
 
 
 async def run_command(command, debug=False, show_output=False):

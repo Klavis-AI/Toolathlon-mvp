@@ -13,6 +13,7 @@ import base64
 import io
 import json
 import os
+import signal
 import sys
 import shutil
 import subprocess
@@ -53,14 +54,18 @@ LOCAL_TOOL_MAPPINGS = {
 
 TASKS_DIR = PROJECT_ROOT
 OUTPUT_DIR = PROJECT_ROOT
-DEFAULT_MODEL = "litellm/claude-sonnet-4-5-20250929"
+DEFAULT_MODEL = "litellm/claude-sonnet-4-6"
 
-_GREEN = "\033[92m"
-_CYAN = "\033[96m"
-_YELLOW = "\033[93m"
-_RED = "\033[91m"
-_DIM = "\033[2m"
-_RST = "\033[0m"
+def _ansi(code: str) -> str:
+    return code if sys.stdout.isatty() else ""
+
+_GREEN = _ansi("\033[92m")
+_CYAN = _ansi("\033[96m")
+_YELLOW = _ansi("\033[93m")
+_RED = _ansi("\033[91m")
+_BLUE = _ansi("\033[94m")
+_DIM = _ansi("\033[2m")
+_RST = _ansi("\033[0m")
 
 KLAVIS_API_BASE = "https://api.klavis.ai"
 
@@ -823,6 +828,21 @@ async def run_task(
     print(f"{'='*60}\n")
 
     klavis = KlavisSandbox()
+
+    # On SIGINT/SIGTERM, always release sandboxes then exit.
+    def _signal_cleanup(signum, frame):
+        print(f"\n[cleanup] Caught signal — releasing sandboxes …")
+        try:
+            klavis.cleanup_temp_files()
+            klavis.release_all()
+            print("[cleanup] Sandboxes released")
+        except Exception:
+            pass
+        os._exit(1)
+
+    signal.signal(signal.SIGINT, _signal_cleanup)
+    signal.signal(signal.SIGTERM, _signal_cleanup)
+
     try:
         all_requested = task["needed_servers"]
         if "python_execute" in task["needed_local_tools"]:
@@ -837,7 +857,7 @@ async def run_task(
             print(f"  {_YELLOW}Local tools: {_GREEN}{tool_names}{_RST}")
         sandbox_id = klavis.get_local_sandbox_id()
         print(f"[sandbox] id={sandbox_id}")
-        print(f"  {_YELLOW}Needed/Required MCP Servers:       \033[94m{all_requested}{_RST}")
+        print(f"  {_YELLOW}Needed/Required MCP Servers:       {_BLUE}{all_requested}{_RST}")
         print(f"  {_YELLOW}Actually Connected Klavis Servers: {_GREEN}{list(server_urls.keys())}{_RST}")
         if local_tools:
             print(f"  {_YELLOW}Local Tools (non-Klavis):          {_GREEN}{[t.name for t in local_tools]}{_RST}")
@@ -928,15 +948,337 @@ async def run_task(
         klavis.release_all()
         print("[cleanup] Sandboxes released")
 
+# ========================== Parallel Execution ==========================
+
+def _load_conflict_groups() -> List[List[str]]:
+    """Load conflict groups from task_conflict.json (tasks that must not run concurrently)."""
+    conflict_file = TASKS_DIR / "tasks" / "finalpool" / "task_conflict.json"
+    if not conflict_file.exists():
+        return []
+    data = json.loads(conflict_file.read_text())
+    return data.get("conflict_groups", [])
+
+
+def _task_short_name(task_path: str) -> str:
+    """Extract the short task name from a path like 'tasks/finalpool/arrange-workspace'."""
+    return Path(task_path).name
+
+
+def _resolve_task_list(raw: List[str]) -> List[str]:
+    """Expand a task list — entries can be paths or a .txt file with one task per line."""
+    tasks: List[str] = []
+    for entry in raw:
+        p = Path(entry)
+        if p.suffix == ".txt" and p.exists():
+            for line in p.read_text().splitlines():
+                line = line.strip()
+                if line and not line.startswith("#"):
+                    tasks.append(line)
+        else:
+            tasks.append(entry)
+    return tasks
+
+
+# The 52 Klavis-supported tasks (status=ready in task_status_in_klavis_sandbox.md).
+# Only these have all required MCP servers available in the Klavis sandbox.
+SUPPORTED_TASKS = [
+    "ab-testing",
+    "academic-warning",
+    "apply-phd-email",
+    "arrange-workspace",
+    "course-assistant",
+    "courses-ta-hws",
+    "detect-revised-terms",
+    "email-paper-homepage",
+    "excel-data-transformation",
+    "excel-market-research",
+    "experiments-recordings",
+    "filter-low-selling-products",
+    "flagged-transactions",
+    "game-statistics",
+    "git-bug-hunt",
+    "git-repo",
+    "huggingface-upload",
+    "imagenet",
+    "interview-report",
+    "inventory-sync",
+    "landing-task-reminder",
+    "live-transactions",
+    "machine-operating",
+    "merge-hf-datasets",
+    "music-analysis",
+    "nhl-b2b-analysis",
+    "notion-hr",
+    "notion-personal-website",
+    "paper-checker",
+    "payable-invoice-checker",
+    "personal-website-construct",
+    "ppt-analysis",
+    "price-comparison",
+    "privacy-desensitization",
+    "reimbursement-form-filler",
+    "sales-accounting",
+    "set-conf-cr-ddl",
+    "sla-timeout-monitor",
+    "student-interview",
+    "sync-todo-to-readme",
+    "task-tracker",
+    "travel-expense-reimbursement",
+    "university-course-selection",
+    "update-material-inventory",
+    "wandb-best-score",
+    "wandb-shortest-length",
+    "woocommerce-customer-survey",
+    "woocommerce-new-product",
+    "woocommerce-new-welcome",
+    "woocommerce-product-recall",
+    "woocommerce-stock-alert",
+    "woocommerce-update-cover",
+]
+
+
+def _get_all_ready_tasks() -> List[str]:
+    """Return paths for the 52 supported tasks that exist on disk."""
+    base = TASKS_DIR / "tasks" / "finalpool"
+    if not base.exists():
+        return []
+    return sorted(
+        f"tasks/finalpool/{name}"
+        for name in SUPPORTED_TASKS
+        if (base / name / "task_config.json").exists()
+    )
+
+
+async def run_tasks_parallel(
+    task_names: List[str],
+    model: str = DEFAULT_MODEL,
+    max_turns: int = 50,
+    max_parallel: int = 10,
+    log_dir: str = "logs",
+) -> Dict[str, Optional[bool]]:
+    """Run multiple tasks with bounded parallelism, respecting conflict groups.
+
+    Each task is launched as a **separate subprocess** so that:
+      - stdout/stderr are naturally isolated (no global sys.stdout conflict)
+      - blocking subprocess.run() calls inside run_preprocess/evaluate
+        don't stall the event loop or other tasks
+
+    Each task's full output is captured in ``<log_dir>/<task_short_name>.log``.
+    A summary is printed to the terminal after all tasks finish.
+
+    Conflict groups (from task_conflict.json) are serialised: tasks within the
+    same group run one-at-a-time while tasks in different groups (and
+    non-conflicting tasks) run in parallel up to *max_parallel*.
+    """
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    run_log_dir = os.path.join(log_dir, f"run_{timestamp}")
+    os.makedirs(run_log_dir, exist_ok=True)
+
+    # Build conflict-group lookup: short_name → group_id
+    conflict_groups = _load_conflict_groups()
+    task_to_group: Dict[str, int] = {}
+    for gid, group in enumerate(conflict_groups):
+        for t in group:
+            task_to_group[t] = gid
+
+    # One lock per conflict group (serialises tasks within the same group)
+    group_locks: Dict[int, asyncio.Lock] = {}
+    for gid in set(task_to_group.values()):
+        group_locks[gid] = asyncio.Lock()
+
+    semaphore = asyncio.Semaphore(max_parallel)
+    results: Dict[str, Optional[bool]] = {}
+    start_time = datetime.now()
+
+    # Path to this script — used to launch child processes.
+    this_script = str(Path(__file__).resolve())
+
+    # No need to track child processes for signal delivery.
+    # Ctrl+C sends SIGINT to the entire foreground process group,
+    # so all children receive it automatically.  Each child runs in
+    # --task mode with its own signal handler that calls
+    # klavis.release_all() before exiting.
+
+    async def _wrapped(task_name: str):
+        short = _task_short_name(task_name)
+        log_path = os.path.join(run_log_dir, f"{short}.log")
+        gid = task_to_group.get(short)
+        lock = group_locks.get(gid) if gid is not None else None
+
+        async with semaphore:
+            if lock:
+                await lock.acquire()
+            try:
+                print(f"{_CYAN}[parallel]{_RST} Starting  {_YELLOW}{short}{_RST}  →  {log_path}")
+                # Launch as a child process — completely isolated stdout/stderr
+                # and its own event loop, so blocking subprocess calls inside
+                # run_preprocess/evaluate don't affect other tasks.
+                cmd = [
+                    sys.executable, "-u", this_script,
+                    "--task", task_name,
+                    "--model", model,
+                    "--max-turns", str(max_turns),
+                ]
+                with open(log_path, "w") as log_fh:
+                    log_fh.write(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] "
+                                 f"Command: {' '.join(cmd)}\n{'='*80}\n")
+                    log_fh.flush()
+                    proc = await asyncio.create_subprocess_exec(
+                        *cmd,
+                        stdout=log_fh,
+                        stderr=log_fh,
+                        cwd=str(PROJECT_ROOT),
+                    )
+                    returncode = await proc.wait()
+
+                passed = returncode == 0
+                results[task_name] = passed
+                status = f"{_GREEN}PASS{_RST}" if passed else f"{_RED}FAIL{_RST}"
+                print(f"{_CYAN}[parallel]{_RST} Finished  {_YELLOW}{short}{_RST}  →  {status}")
+            except asyncio.CancelledError:
+                # Task was cancelled due to Ctrl+C — don't log as an unexpected error
+                results[task_name] = None
+                raise
+            except Exception as exc:
+                results[task_name] = None
+                print(f"{_RED}[parallel]{_RST} Error     {_YELLOW}{short}{_RST}  →  {exc}")
+                import traceback
+                with open(log_path, "a") as fh:
+                    fh.write(f"\n\n{'='*60}\nUNHANDLED EXCEPTION\n{'='*60}\n")
+                    traceback.print_exc(file=fh)
+            finally:
+                if lock:
+                    lock.release()
+
+    try:
+        await asyncio.gather(*[_wrapped(t) for t in task_names])
+    except (asyncio.CancelledError, KeyboardInterrupt):
+        print(f"\n{_RED}[parallel]{_RST} Interrupted — children received SIGINT and will release their sandboxes")
+
+    # ---- Summary ----
+    elapsed = datetime.now() - start_time
+    passed = sum(1 for v in results.values() if v is True)
+    failed = sum(1 for v in results.values() if v is False)
+    errors = sum(1 for v in results.values() if v is None)
+
+    print(f"\n{'='*70}")
+    print(f"  PARALLEL RUN SUMMARY   ({elapsed.total_seconds():.1f}s elapsed)")
+    print(f"  Logs directory: {run_log_dir}")
+    print(f"{'='*70}")
+    print(f"  {'Task':<45} {'Result':>10}")
+    print(f"  {'-'*45} {'-'*10}")
+    for t in task_names:
+        short = _task_short_name(t)
+        v = results.get(t)
+        if v is True:
+            tag = f"{_GREEN}PASS{_RST}"
+        elif v is False:
+            tag = f"{_RED}FAIL{_RST}"
+        else:
+            tag = f"{_RED}ERROR{_RST}"
+        print(f"  {short:<45} {tag:>10}")
+    print(f"\n  Passed: {passed}  |  Failed: {failed}  |  Errors: {errors}  |  Total: {len(results)}")
+    print(f"{'='*70}\n")
+
+    # Write a machine-readable summary JSON alongside the logs
+    summary = {
+        "timestamp": timestamp,
+        "model": model,
+        "max_turns": max_turns,
+        "max_parallel": max_parallel,
+        "elapsed_seconds": round(elapsed.total_seconds(), 1),
+        "results": {_task_short_name(t): {True: "PASS", False: "FAIL"}.get(results.get(t), "ERROR") for t in task_names},
+        "passed": passed,
+        "failed": failed,
+        "errors": errors,
+    }
+    summary_path = os.path.join(run_log_dir, "summary.json")
+    with open(summary_path, "w") as fh:
+        json.dump(summary, fh, indent=2)
+    print(f"  Summary written to {summary_path}")
+
+    return results
+
+
 def main():
-    parser = argparse.ArgumentParser(description="Toolathlon Runner")
-    parser.add_argument("--task", default="tasks/finalpool/landing-task-reminder", help="Single task path under tasks/, e.g. tasks/finalpool/arrange-workspace")
+    parser = argparse.ArgumentParser(
+        description="Toolathlon Runner — run one or many tasks (with parallel support)",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""\
+examples:
+  # Run a single task (output goes to terminal)
+  python toolathlon_task_run_example.py --task tasks/finalpool/arrange-workspace
+
+  # Run multiple tasks in parallel (default 10 workers, logs to files)
+  python toolathlon_task_run_example.py --tasks tasks/finalpool/arrange-workspace tasks/finalpool/git-repo
+
+  # Run tasks listed in a file
+  python toolathlon_task_run_example.py --tasks my_tasks.txt --parallel 5
+
+  # Run ALL 52 supported tasks (default when no --task/--tasks given)
+  python toolathlon_task_run_example.py
+  python toolathlon_task_run_example.py --parallel 5
+  python toolathlon_task_run_example.py --all --parallel 10
+""",
+    )
+    parser.add_argument("--task", default=None,
+                        help="Single task path (output to terminal). e.g. tasks/finalpool/arrange-workspace")
+    parser.add_argument("--tasks", nargs="+", default=None,
+                        help="Multiple task paths (or a .txt file). Each task's output is saved to a log file.")
+    parser.add_argument("--all", action="store_true",
+                        help="Run all 52 supported tasks in parallel (this is the default when no --task/--tasks given)")
     parser.add_argument("--model", default=DEFAULT_MODEL, help="Model name")
     parser.add_argument("--max-turns", type=int, default=50, help="Max agent tool-call turns")
+    parser.add_argument("--parallel", type=int, default=10,
+                        help="Max number of tasks to run concurrently (default: 10)")
+    parser.add_argument("--log-dir", default="logs",
+                        help="Directory for per-task log files (default: logs/)")
     args = parser.parse_args()
 
-    result = asyncio.run(run_task(args.task, args.model, args.max_turns))
-    sys.exit(0 if result else 1)
+    # Determine which mode to use
+    modes_set = sum([args.task is not None, args.tasks is not None, args.all])
+    if modes_set > 1:
+        parser.error("Use exactly one of --task, --tasks, or --all")
+
+    if args.task:
+        # Single-task mode: backward compatible, prints to terminal.
+        # run_task() installs its own SIGINT/SIGTERM handler to ensure
+        # sandbox cleanup even on repeated Ctrl+C.
+        result = asyncio.run(run_task(args.task, args.model, args.max_turns))
+        sys.exit(0 if result else 1)
+
+    elif args.tasks:
+        task_list = _resolve_task_list(args.tasks)
+        if not task_list:
+            print(f"{_RED}No tasks resolved from --tasks{_RST}")
+            sys.exit(1)
+        print(f"{_CYAN}[parallel]{_RST} {len(task_list)} tasks, running with parallelism={args.parallel}")
+        try:
+            results = asyncio.run(run_tasks_parallel(
+                task_list, args.model, args.max_turns, args.parallel, args.log_dir,
+            ))
+        except KeyboardInterrupt:
+            print(f"\n{_RED}[main]{_RST} Interrupted")
+            results = {}
+        any_fail = any(v is not True for v in results.values()) if results else True
+        sys.exit(1 if any_fail else 0)
+
+    else:
+        # Default: run all 52 supported tasks in parallel (same as --all)
+        task_list = _get_all_ready_tasks()
+        if not task_list:
+            print(f"{_RED}No supported tasks found under tasks/finalpool/{_RST}")
+            sys.exit(1)
+        print(f"{_CYAN}[parallel]{_RST} Running {len(task_list)} supported tasks with parallelism={args.parallel}")
+        try:
+            results = asyncio.run(run_tasks_parallel(
+                task_list, args.model, args.max_turns, args.parallel, args.log_dir,
+            ))
+        except KeyboardInterrupt:
+            print(f"\n{_RED}[main]{_RST} Interrupted")
+            results = {}
+        any_fail = any(v is not True for v in results.values()) if results else True
+        sys.exit(1 if any_fail else 0)
 
 
 if __name__ == "__main__":

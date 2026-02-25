@@ -14,7 +14,9 @@ A self-contained, minimal example for running [Toolathlon](https://github.com/to
   - [Installation](#installation)
   - [Quick Start](#quick-start)
     - [1. Set environment variables](#1-set-environment-variables)
-    - [2. Run a task](#2-run-a-task)
+    - [2. Run tasks](#2-run-tasks)
+  - [Parallel Execution](#parallel-execution)
+    - [Logs and Summary](#logs-and-summary)
   - [Task Directory Structure](#task-directory-structure)
     - [Key files explained](#key-files-explained)
     - [Example `task_config.json`](#example-task_configjson)
@@ -224,21 +226,37 @@ ANTHROPIC_API_KEY=your_anthropic_key_here    # if using Claude models
 OPENAI_API_KEY=your_openai_key_here          # if using GPT models
 ```
 
-### 2. Run a task
+### 2. Run tasks
 
 ```bash
-# Run the default task (arrange-workspace)
-python toolathlon_task_run_example.py
+# Single task (output to terminal)
+python toolathlon_task_run_example.py --task tasks/finalpool/arrange-workspace
 
-# Run a specific task
-python toolathlon_task_run_example.py --task tasks/finalpool/courses-ta-hws
+# Multiple tasks in parallel (each task logs to logs/<run>/)
+python toolathlon_task_run_example.py --tasks tasks/finalpool/arrange-workspace tasks/finalpool/git-repo
 
-# Use a different model
-python toolathlon_task_run_example.py --task tasks/finalpool/arrange-workspace --model litellm/gpt-4o
-
-# Increase max agent turns
-python toolathlon_task_run_example.py --task tasks/finalpool/inventory-sync --max-turns 80
+# All 52 supported tasks (default when no --task/--tasks given)
+python toolathlon_task_run_example.py --parallel 5
 ```
+
+## Parallel Execution
+
+When using `--tasks` or `--all`, each task runs as a **separate subprocess** with isolated stdout/stderr. An `asyncio.Semaphore` bounds concurrency to `--parallel` (default 10).
+
+### Logs and Summary
+
+Each parallel run creates a timestamped directory under `logs/`:
+
+```
+logs/run_20260224_155517/
+├── arrange-workspace.log   # Full stdout/stderr per task
+├── git-repo.log
+└── summary.json            # Machine-readable results (pass/fail/error counts)
+```
+
+A coloured summary table is also printed to the terminal.
+
+---
 
 ## Task Directory Structure
 
@@ -590,10 +608,14 @@ Toolathlon Notion tasks use a unique preprocessing approach: instead of initiali
 
 ```
 Toolathlon-mvp/
-├── toolathlon_task_run_example.py   # Main entry point — the complete runner
+├── toolathlon_task_run_example.py   # Main entry point — single & parallel task runner
 ├── requirements.txt                 # Python dependencies
 ├── task_status_in_klavis_sandbox.md # Task support status reference
 ├── .env                             # Your API keys (create this)
+├── logs/                            # Per-run log directories (auto-created)
+│   └── run_YYYYMMDD_HHMMSS/        #   Each parallel run gets a timestamped dir
+│       ├── <task-name>.log          #     Full stdout/stderr per task
+│       └── summary.json             #     Machine-readable pass/fail results
 ├── _hijack/                         # ⚡ Network & file-open hijack module
 │   └── sitecustomize.py             #   Auto-loaded via PYTHONPATH; patches
 │                                    #   socket.getaddrinfo() and builtins.open()
