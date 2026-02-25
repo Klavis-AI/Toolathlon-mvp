@@ -28,7 +28,7 @@ from typing import Dict, Optional, List
 
 import httpx
 from dotenv import load_dotenv
-from agents import Agent, Runner, RunHooks
+from agents import Agent, Runner, RunHooks, ModelSettings
 from agents.mcp import MCPServerManager, MCPServerStreamableHttp
 
 PROJECT_ROOT = Path(__file__).resolve().parent
@@ -924,6 +924,7 @@ async def run_task(
                 model=model,
                 mcp_servers=manager.active_servers,
                 tools=local_tools or [],
+                model_settings=ModelSettings(parallel_tool_calls=True),
             )
 
             print(f"\n[agent] Running …\n")
