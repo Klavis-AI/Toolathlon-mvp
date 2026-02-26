@@ -33,6 +33,7 @@ A self-contained, minimal example for running [Toolathlon](https://github.com/to
     - [How `_build_subprocess_env` Ties It Together](#how-_build_subprocess_env-ties-it-together)
     - [Implementing This Yourself](#implementing-this-yourself)
     - [Special Case: Handling Notion Tasks](#special-case-handling-notion-tasks)
+  - [Timezone Handling (UTC Requirement)](#timezone-handling-utc-requirement)
   - [Project Structure](#project-structure)
   - [Agent Framework \& Customization](#agent-framework--customization)
 
@@ -635,6 +636,14 @@ Toolathlon Notion tasks use a unique preprocessing approach: instead of initiali
 1. **Pre-configured Accounts:** The Klavis Sandbox backend already manages the Notion account setup, integration keys, and page URLs. You do not need to perform manual Notion setup; these values are dynamically injected for use in `configs/token_key_session.py`.
 2. **Official MCP Token Extraction & Auto-Refresh:** When the runner acquires the `notion` sandbox from Klavis, it extracts the Notion access token from the returned auth data and sets it as `KLAVIS_NOTION_OFFICIAL_MCP_ACCESS_TOKEN` (`toolathlon_task_run_example.py`). Furthermore, Klavis backend has OAuth server that automatically handles token refreshing, ensuring your Notion access token is always up to date when acquire sandbox.
 3. **Direct Official Connection:** Using this token, the runner registers a `notion_official` MCP server pointing directly to `https://mcp.notion.com/mcp` (`utils/mcp/tool_servers.py`). This allows the local preprocess scripts to connect to the official Notion MCP to successfully duplicate and arrange the required pages.
+
+---
+
+## Timezone Handling (UTC Requirement)
+
+Some eval scripts (e.g., `academic-warning`) format `datetime.now()` with a hardcoded `+00:00` offset, assuming the host is UTC. On non-UTC machines this produces incorrect Cloud Logging time filters, causing evals to miss recently written logs.
+
+The runner fixes this by generating `launch_time` with `datetime.now(timezone.utc)` and setting `env["TZ"] = "UTC"` for all preprocess/eval subprocesses.
 
 ---
 

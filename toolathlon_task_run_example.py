@@ -22,7 +22,7 @@ import tempfile
 import tarfile
 import importlib.util
 import argparse
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, Optional, List
 
@@ -57,7 +57,7 @@ LOCAL_TOOL_MAPPINGS = {
 
 TASKS_DIR = PROJECT_ROOT
 OUTPUT_DIR = PROJECT_ROOT
-DEFAULT_MODEL = "litellm/openrouter/anthropic/claude-sonnet-4-6"
+DEFAULT_MODEL = "litellm/anthropic/claude-sonnet-4-6"
 
 def _ansi(code: str) -> str:
     return code if sys.stdout.isatty() else ""
@@ -440,17 +440,17 @@ class KlavisSandbox:
     def release_all(self):
         """Release all acquired sandboxes."""
         headers = {"Authorization": f"Bearer {self.api_key}"}
-        # if self.local_sandbox_id:
-        #     try:
-        #         resp = httpx.delete(
-        #             f"{KLAVIS_API_BASE}/local-sandbox/{self.local_sandbox_id}",
-        #             headers=headers, timeout=30,
-        #         )
-        #         resp.raise_for_status()
-        #         print(f"[Klavis] Released local sandbox '{self.local_sandbox_id}'")
-        #     except Exception as e:
-        #         print(f"[Klavis] Failed to release local sandbox '{self.local_sandbox_id}': {e}")
-        #     self.local_sandbox_id = None
+        if self.local_sandbox_id:
+            try:
+                resp = httpx.delete(
+                    f"{KLAVIS_API_BASE}/local-sandbox/{self.local_sandbox_id}",
+                    headers=headers, timeout=30,
+                )
+                resp.raise_for_status()
+                print(f"[Klavis] Released local sandbox '{self.local_sandbox_id}'")
+            except Exception as e:
+                print(f"[Klavis] Failed to release local sandbox '{self.local_sandbox_id}': {e}")
+            self.local_sandbox_id = None
         for sandbox in self.acquired_sandboxes:
             sandbox_id = sandbox.get("sandbox_id")
             server_name = sandbox.get("server_name")
@@ -750,6 +750,7 @@ def run_preprocess(task: dict, auth_env: Optional[Dict[str, str]] = None, launch
         print(f"{_CYAN}[preprocess]{_RST} Copied task-root files.tar.gz into temp dir")
 
     env = _build_subprocess_env(auth_env)
+    env["TZ"] = "UTC"
     preprocess_dir = preprocess_main.parent
     init = preprocess_dir / "__init__.py"
     created_init = not init.exists()
@@ -804,6 +805,10 @@ def evaluate(task: dict, workspace_path: str, auth_env: Optional[Dict[str, str]]
         if created:
             init.write_text("")
         env = _build_subprocess_env(auth_env)
+        # Eval scripts assume datetime.now() returns UTC (they format local
+        # time with a hardcoded +00:00 offset).  Force UTC in the subprocess
+        # so the time filters are correct regardless of the host timezone.
+        env["TZ"] = "UTC"
         # Create an empty res.json because some script expect it to exist and will error if it's missing.
         res_log_file = eval_dir / "res.json"
         res_log_file.write_text('{"messages": []}')
@@ -897,7 +902,7 @@ async def run_task(
         if local_tools:
             print(f"  {_YELLOW}Local Tools (non-Klavis):          {_GREEN}{[t.name for t in local_tools]}{_RST}")
 
-        launch_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S %A")
+        launch_time = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S %A")
 
         # Build per-server MCP headers. The emails server requires an
         # x-email-config header containing the base64-encoded user credentials
