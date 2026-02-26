@@ -25,3 +25,4 @@ notion-client
 playwright
 huggingface-hub
 python-docx
+mcp
