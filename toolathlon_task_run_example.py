@@ -55,8 +55,7 @@ LOCAL_TOOL_MAPPINGS = {
     "web_search": tool_web_search,
 }
 
-TASKS_DIR = PROJECT_ROOT
-OUTPUT_DIR = PROJECT_ROOT
+TASKS_DIR = Path("/Users/zihaolin/ssrc")
 DEFAULT_MODEL = "litellm/anthropic/claude-sonnet-4-6"
 
 def _ansi(code: str) -> str:
@@ -995,7 +994,7 @@ async def run_task(
             )
             print(f"\n[agent] Final output:\n{result.final_output[:600]}\n")
 
-        ws_dir = OUTPUT_DIR / task_name / "workspace"
+        ws_dir = TASKS_DIR / task_name / "workspace"
         if ws_dir.exists():
             shutil.rmtree(ws_dir)
         ws_dir.mkdir(parents=True, exist_ok=True)
@@ -1296,7 +1295,7 @@ examples:
     parser.add_argument("--all", action="store_true",
                         help="Run all 52 supported tasks in parallel (this is the default when no --task/--tasks given)")
     parser.add_argument("--model", default=DEFAULT_MODEL, help="Model name")
-    parser.add_argument("--max-turns", type=int, default=100, help="Max agent tool-call turns")
+    parser.add_argument("--max-turns", type=int, default=500, help="Max agent tool-call turns")
     parser.add_argument("--parallel", type=int, default=10,
                         help="Max number of tasks to run concurrently (default: 10)")
     parser.add_argument("--log-dir", default="logs",
