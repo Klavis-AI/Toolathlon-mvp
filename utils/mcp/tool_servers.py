@@ -89,14 +89,15 @@ class MCPServerManager:
             headers = info.get("headers", {}) if isinstance(info, dict) else {}
             if not url:
                 continue
-            params: dict = {"url": url}
+            params = {"url": url, "timeout": 1200}
             if headers:
                 params["headers"] = headers
             server = MCPServerStreamableHttp(
                 params=params,
                 name=name,
                 cache_tools_list=True,
-                client_session_timeout_seconds=120,
+                client_session_timeout_seconds=1200,
+                max_retry_attempts=2,
             )
             self.servers[name] = server
             if debug:
@@ -112,12 +113,14 @@ class MCPServerManager:
                 notion_params = {
                     "url": "https://mcp.notion.com/mcp",
                     "headers": {"Authorization": f"Bearer {notion_official_access_token}"},
+                    "timeout": 1200
                 }
                 notion_server = MCPServerStreamableHttp(
                     params=notion_params,
                     name="notion_official",
                     cache_tools_list=True,
-                    client_session_timeout_seconds=120,
+                    client_session_timeout_seconds=1200,
+                    max_retry_attempts=2,
                 )
                 self.servers["notion_official"] = notion_server
                 if debug:

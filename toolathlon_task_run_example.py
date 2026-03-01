@@ -27,6 +27,7 @@ from pathlib import Path
 from typing import Dict, Optional, List
 
 import httpx
+import litellm
 from dotenv import load_dotenv
 from agents import Agent, Runner, RunHooks, ModelSettings
 from agents.mcp import MCPServerManager, MCPServerStreamableHttp
@@ -37,6 +38,12 @@ sys.path.insert(0, str(PROJECT_ROOT))
 load_dotenv(PROJECT_ROOT / ".env")
 
 logging.getLogger("openai.agents").setLevel(logging.CRITICAL) # Suppress OpenAI Agents SDK logging, this is non-fatal.
+
+# LiteLLM retry settings — helps survive transient SSL/network errors
+# when running many tasks in parallel.
+litellm.num_retries = 3
+litellm.request_timeout = 120
+litellm.retry_after = 5  # seconds between retries
 
 # Local tools copied from Toolathlon/utils/aux_tools/ (mirrored structure), they are needed for the task to run.
 # "python_execute" is intentionally excluded (runs on Klavis sandbox instead).
@@ -57,7 +64,7 @@ LOCAL_TOOL_MAPPINGS = {
 
 TASKS_DIR = PROJECT_ROOT # change to your directory where you put the tasks
 OUTPUT_DIR = PROJECT_ROOT
-DEFAULT_MODEL = "litellm/anthropic/claude-sonnet-4-6"
+DEFAULT_MODEL = "litellm/openrouter/minimax/minimax-m2.5"
 
 def _ansi(code: str) -> str:
     return code if sys.stdout.isatty() else ""
@@ -963,7 +970,7 @@ async def run_task(
 
         mcp_servers = []
         for name, url in server_urls.items():
-            params: Dict = {"url": url}
+            params = {"url": url, "timeout": 1200}
             if name in server_headers:
                 params["headers"] = server_headers[name]
             mcp_servers.append(
@@ -971,7 +978,8 @@ async def run_task(
                     params=params,
                     name=name,
                     cache_tools_list=True,
-                    client_session_timeout_seconds=600,
+                    client_session_timeout_seconds=1200,
+                    max_retry_attempts=2,
                 )
             )
 
