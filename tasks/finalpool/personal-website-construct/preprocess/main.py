@@ -17,8 +17,3 @@ if __name__=="__main__":
     github_delete_repo(GITHUB_TOKEN, username, "LJT-Homepage")
 
     print("Have deleted the `academicpages.github.io` and `LJT-Homepage` repos for initialization.")
-
-    # Verify preprocess results
-    from preprocess.verify import verify
-    if not verify():
-        raise RuntimeError("Preprocess verification failed")

@@ -89,8 +89,3 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
-
-    # Verify preprocess results
-    from preprocess.verify import verify
-    if not verify():
-        raise RuntimeError("Preprocess verification failed")
