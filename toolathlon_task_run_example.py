@@ -528,13 +528,14 @@ def upload_workspace_tarball(klavis: KlavisSandbox, tarball_path: str, timeout: 
     upload_resp = klavis.get_upload_url(sandbox_id)
     if not upload_resp or "upload_url" not in upload_resp:
         return None
-
-    resp = httpx.put(
-        upload_resp["upload_url"],
-        headers={"Content-Type": "application/gzip"},
-        content=content,
-        timeout=timeout,
-    )
+    # Force HTTP/1.1 — signed URL endpoints (S3/GCS) often disconnect on HTTP/2.
+    with httpx.Client(http2=False) as client:
+        resp = client.put(
+            upload_resp["upload_url"],
+            headers={"Content-Type": "application/gzip"},
+            content=content,
+            timeout=timeout,
+        )
     resp.raise_for_status()
 
     return klavis.move_files_to_workspace(sandbox_id)
