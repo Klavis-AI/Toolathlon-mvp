@@ -10,10 +10,19 @@ HOW IT WORKS:
     It monkey-patches socket.getaddrinfo() so that:
       - localhost:1143 → HIJACK_IMAP_HOST:HIJACK_IMAP_PORT  (IMAP)
       - localhost:1587 → HIJACK_SMTP_HOST:HIJACK_SMTP_PORT  (SMTP)
+      - localhost:10001 → HIJACK_CANVAS_HOST:HIJACK_CANVAS_PORT  (Canvas LMS API)
+      - localhost:20001 → HIJACK_CANVAS_HOST:HIJACK_CANVAS_PORT  (Canvas LMS alt)
       - All other connections (e.g. localhost:17362) pass through unchanged.
+    
+    Note: For original Toolathlon Canvas LMS Tasks: 
+    Canvas Docker (port 3000)
+    ↑ HTTP
+    ├── localhost:10001  ──  Direct HTTP  ──  Used by preprocess/evaluation (Python requests/aiohttp)
+    └── localhost:20001  ──  HTTPS proxy  ──  Used by MCP server (CanvasClient hardcodes https://)
 
     Both imaplib and smtplib use socket.getaddrinfo() under the hood, so this
-    catches all email connections before they're even attempted.
+    catches all email connections before they're even attempted.  aiohttp and
+    requests also resolve via getaddrinfo(), so Canvas HTTP calls are caught too.
 
     FILE OPEN PATCH:
     It monkey-patches builtins.open(), io.open(), os.stat(), and
@@ -28,7 +37,7 @@ HOW IT WORKS:
     without writing to the shared configs/ directory.
 
 ACTIVATION:
-    Socket patch activates if HIJACK_IMAP_HOST or HIJACK_SMTP_HOST is set.
+    Socket patch activates if any HIJACK_*_HOST env var is set.
     File-open patch activates if HIJACK_GOOGLE_CREDENTIALS_PATH or
     HIJACK_GCP_SERVICE_ACCOUNT_PATH is set.
     If none of the HIJACK_* env vars are present, this module does nothing.
@@ -53,6 +62,8 @@ _LOCAL_HOSTS = frozenset({"localhost", "127.0.0.1", "::1"})
 _REDIRECT_MAP = {
     1143: ("HIJACK_IMAP_HOST", "HIJACK_IMAP_PORT"),
     1587: ("HIJACK_SMTP_HOST", "HIJACK_SMTP_PORT"),
+    10001: ("HIJACK_CANVAS_HOST", "HIJACK_CANVAS_PORT"),
+    20001: ("HIJACK_CANVAS_HOST", "HIJACK_CANVAS_PORT"),
 }
 
 # Only patch if at least one redirect env var is actually set
