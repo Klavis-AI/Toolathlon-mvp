@@ -968,9 +968,7 @@ async def run_task(
             server_headers["emails"] = {"x-email-config": email_cfg_b64}
             print(f"  {_YELLOW}Email config header set for: {header_payload['email']}{_RST}")
 
-        # The per-task Canvas API token is sent as x-canvas-api-token.  The
-        # ingress merges it with DB auth_metadata (canvas_domain) into a single
-        # x-auth-data header before forwarding to the Canvas MCP server.
+        # The per-task Canvas API token is sent as x-canvas-api-token.
         canvas_api_token = task.get("canvas_api_token")
         if canvas_api_token and "canvas" in server_urls:
             server_headers["canvas"] = {"x-canvas-api-token": canvas_api_token}
