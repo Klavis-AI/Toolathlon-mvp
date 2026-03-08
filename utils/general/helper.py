@@ -9,6 +9,7 @@ import sys
 import asyncio
 import pickle
 import pandas as pd
+import datetime
 
 
 def normalize_str(xstring):
@@ -137,3 +138,12 @@ def read_all(file_path):
     else:
         with open(file_path, "r") as f:
             return f.read()
+
+def compare_iso_time(agent_time, groundtruth_time,date_only=False):
+    # given both date in iso format, compare if they are the same
+    agent_time = datetime.datetime.fromisoformat(agent_time)
+    groundtruth_time = datetime.datetime.fromisoformat(groundtruth_time)
+    if date_only: # we only compare the date part
+        agent_time = agent_time.date()
+        groundtruth_time = groundtruth_time.date()
+    return agent_time == groundtruth_time

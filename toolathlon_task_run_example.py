@@ -155,6 +155,9 @@ SANDBOX_AUTH_ENV_MAPPING = {
         "toolathon_source_notion_page_url": "KLAVIS_SOURCE_NOTION_PAGE_URL",
         "toolathon_eval_notion_page_url": "KLAVIS_EVAL_NOTION_PAGE_URL",
     },
+    "weights_and_biases": {
+        "api_key": "WANDB_API_KEY",
+    },
 }
 
 # Servers whose auth_data contains Google OAuth credentials (token,
@@ -865,8 +868,14 @@ async def run_task(
     task_name: str,
     model: str = DEFAULT_MODEL,
     max_turns: int = 25,
+    preprocess_only: bool = False,
 ):
-    """End-to-end: sandbox → upload → agent run → download → evaluate."""
+    """End-to-end: sandbox → upload → agent run → download → evaluate.
+
+    If *preprocess_only* is True, stop after preprocess + upload and skip
+    the agent run, download, and evaluation steps.  Useful for verifying
+    that preprocessing completes successfully for all tasks.
+    """
 
     task = load_task(task_name)
     print(f"\n{'='*60}")
@@ -941,7 +950,11 @@ async def run_task(
         tarball = run_preprocess(task, auth_env=klavis.auth_env, launch_time=launch_time)
         if tarball and sandbox_id:
             upload_workspace_tarball(klavis, tarball)
-        
+
+        if preprocess_only:
+            print(f"\n{_GREEN}[preprocess-only]{_RST} Preprocess + upload finished for {task['name']}")
+            return True
+
         # After preprocess, some tasks (e.g. nhl-b2b-analysis) write a Google
         # Drive folder_id to files/folder_id.txt.  Pass it as a header to the
         # google_sheet MCP server so it knows which folder to operate on.
@@ -1132,6 +1145,7 @@ async def run_tasks_parallel(
     max_turns: int = 100,
     max_parallel: int = 10,
     log_dir: str = "logs",
+    preprocess_only: bool = False,
 ) -> Dict[str, Optional[bool]]:
     """Run multiple tasks with bounded parallelism, respecting conflict groups.
 
@@ -1196,6 +1210,8 @@ async def run_tasks_parallel(
                     "--model", model,
                     "--max-turns", str(max_turns),
                 ]
+                if preprocess_only:
+                    cmd.append("--preprocess-only")
                 with open(log_path, "w") as log_fh:
                     log_fh.write(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] "
                                  f"Command: {' '.join(cmd)}\n{'='*80}\n")
@@ -1310,6 +1326,8 @@ examples:
                         help="Max number of tasks to run concurrently (default: 10)")
     parser.add_argument("--log-dir", default="logs",
                         help="Directory for per-task log files (default: logs/)")
+    parser.add_argument("--preprocess-only", action="store_true",
+                        help="Only run preprocess + upload, then stop (skip agent, download, eval)")
     args = parser.parse_args()
 
     # Determine which mode to use
@@ -1321,7 +1339,8 @@ examples:
         # Single-task mode: backward compatible, prints to terminal.
         # run_task() installs its own SIGINT/SIGTERM handler to ensure
         # sandbox cleanup even on repeated Ctrl+C.
-        result = asyncio.run(run_task(args.task, args.model, args.max_turns))
+        result = asyncio.run(run_task(args.task, args.model, args.max_turns,
+                                      preprocess_only=args.preprocess_only))
         sys.exit(0 if result else 1)
 
     elif args.tasks:
@@ -1333,6 +1352,7 @@ examples:
         try:
             results = asyncio.run(run_tasks_parallel(
                 task_list, args.model, args.max_turns, args.parallel, args.log_dir,
+                preprocess_only=args.preprocess_only,
             ))
         except KeyboardInterrupt:
             print(f"\n{_RED}[main]{_RST} Interrupted")
@@ -1350,6 +1370,7 @@ examples:
         try:
             results = asyncio.run(run_tasks_parallel(
                 task_list, args.model, args.max_turns, args.parallel, args.log_dir,
+                preprocess_only=args.preprocess_only,
             ))
         except KeyboardInterrupt:
             print(f"\n{_RED}[main]{_RST} Interrupted")

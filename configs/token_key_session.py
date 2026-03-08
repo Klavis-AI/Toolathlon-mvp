@@ -29,4 +29,6 @@ all_token_key_session = Dict(
     snowflake_database=os.environ.get("KLAVIS_SNOWFLAKE_DATABASE", "SNOWFLAKE"),
     snowflake_schema=os.environ.get("KLAVIS_SNOWFLAKE_SCHEMA", "PUBLIC"),
     snowflake_op_allowed_databases="null",
+
+    wandb_api_key=os.environ.get("WANDB_API_KEY", ""),
 )
