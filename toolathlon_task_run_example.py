@@ -283,19 +283,18 @@ class KlavisSandbox:
                             self.auth_env["HIJACK_SMTP_HOST"] = str(auth["smtp_server"])
                             self.auth_env["HIJACK_SMTP_PORT"] = str(auth.get("smtp_port", 1587))
                             print(f"[Klavis] Email hijack: SMTP -> {auth['smtp_server']}:{auth.get('smtp_port', 1587)}")
-                    # Extract Canvas auth_data for socket hijacking.
-                    # Child preprocess/eval scripts hardcode localhost:10001
+                    # Extract Canvas auth_data for URL-level hijacking.
+                    # Child preprocess/eval scripts hardcode http://localhost:10001
                     # (and occasionally localhost:20001) for the Canvas LMS API.
-                    # We redirect to the real Canvas pod via HIJACK_CANVAS_*.
+                    # We rewrite these URLs to the external Canvas ingress via
+                    # HIJACK_CANVAS_BASE_URL (e.g. https://34.61.162.164/{pod_id}).
                     if sname == "canvas":
                         auth = server.get("auth_data") or {}
-                        canvas_url = auth.get("canvas_url", "")
-                        if canvas_url:
-                            from urllib.parse import urlparse
-                            parsed = urlparse(canvas_url)
-                            self.auth_env["HIJACK_CANVAS_HOST"] = parsed.hostname or ""
-                            self.auth_env["HIJACK_CANVAS_PORT"] = str(parsed.port or 3000)
-                            print(f"[Klavis] Canvas hijack: localhost:10001/20001 -> {parsed.hostname}:{parsed.port or 3000}")
+                        canvas_domain = auth.get("canvas_domain", "")
+                        if canvas_domain:
+                            base_url = f"https://{canvas_domain}" if not canvas_domain.startswith("http") else canvas_domain
+                            self.auth_env["HIJACK_CANVAS_BASE_URL"] = base_url
+                            print(f"[Klavis] Canvas hijack: localhost:10001/20001 -> {base_url}")
                     # Extract GCP service-account auth_data for file-open hijacking.
                     # Child preprocess/eval scripts open configs/gcp-service_account.keys.json;
                     # we write the real credentials to a temp file and redirect via HIJACK_*.
@@ -714,10 +713,10 @@ def _build_subprocess_env(auth_env: Optional[Dict[str, str]] = None) -> Dict[str
         env.update(auth_env)
     # If any hijack env vars are set, prepend _hijack/ so that
     # sitecustomize.py is auto-loaded and applies the relevant monkeypatches
-    # (socket redirect for IMAP/SMTP/Canvas, file-open redirect for Google creds).
+    # (socket redirect for IMAP/SMTP, URL rewrite for Canvas, file-open for creds).
     if (env.get("HIJACK_IMAP_HOST")
             or env.get("HIJACK_SMTP_HOST")
-            or env.get("HIJACK_CANVAS_HOST")
+            or env.get("HIJACK_CANVAS_BASE_URL")
             or env.get("HIJACK_GOOGLE_CREDENTIALS_PATH")
             or env.get("HIJACK_GCP_SERVICE_ACCOUNT_PATH")):
         pythonpath_parts.insert(0, SOCKET_HIJACK_DIR)

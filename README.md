@@ -91,7 +91,8 @@ The runner automates the full lifecycle of a Toolathlon benchmark task:
 │  │     │                                                           │ │  │
 │  │     │  _hijack/sitecustomize.py auto-loaded via PYTHONPATH      │ │  │
 │  │     │  (only when HIJACK_* env vars are present)                │ │  │
-│  │     │   • socket.getaddrinfo patched → redirect IMAP/SMTP/Canvas │ │  │
+│  │     │   • socket.getaddrinfo patched → redirect IMAP/SMTP       │ │  │
+│  │     │   • requests/aiohttp patched → rewrite Canvas URLs        │ │  │
 │  │     │   • builtins.open/os.stat patched → redirect cred files   │ │  │
 │  │     └───────────────────────────────────────────────────────────┘ │  │
 │  │                                                                   │  │
@@ -105,7 +106,8 @@ The runner automates the full lifecycle of a Toolathlon benchmark task:
 │  │     │                                                           │ │  │
 │  │     │  _hijack/sitecustomize.py auto-loaded via PYTHONPATH      │ │  │
 │  │     │  (same mechanism as preprocess — only when needed)        │ │  │
-│  │     │   • socket.getaddrinfo patched → redirect IMAP/SMTP/Canvas│ │  │
+│  │     │   • socket.getaddrinfo patched → redirect IMAP/SMTP       │ │  │
+│  │     │   • requests/aiohttp patched → rewrite Canvas URLs        │ │  │
 │  │     │   • builtins.open/os.stat patched → redirect cred files   │ │  │
 │  │     └───────────────────────────────────────────────────────────┘ │  │
 │  │                                                                   │  │
@@ -151,9 +153,7 @@ subprocess (preprocess/eval script)
     │               └── [HIJACKED] → resolves to remote Klavis email IP:port
     │
     ├── aiohttp.get("http://localhost:10001/api/v1/courses")
-    │       └── socket.getaddrinfo("localhost", 10001)
-    │               └── [HIJACKED] → resolves to remote Canvas LMS pod IP:port
-    │   (also catches localhost:20001 → same Canvas pod)
+    │       └── [URL HIJACKED] → rewritten to https://{canvas_domain}/api/v1/courses
     │
     ├── open("configs/google_credentials.json")
     │       └── [HIJACKED] → opens /tmp/google_creds_XXXX.json instead
@@ -442,8 +442,8 @@ In the Klavis sandbox setup, each service runs **remotely** with **dynamically a
 | Strategy | What it solves | Mechanism | Example servers |
 |---|---|---|---|
 | **1. Env vars** | Scripts read tokens/keys from `os.environ` | Set `KLAVIS_*` env vars before launching subprocess | github, woocommerce, snowflake |
-| **2. Network hijack** | Scripts connect to hardcoded `localhost` ports | Monkeypatch `socket.getaddrinfo()` to redirect to remote IPs | email (IMAP/SMTP) |
-| **3. Network hijack** | Scripts connect to hardcoded `localhost` ports | Same socket monkeypatch as #2, plus `x-canvas-api-token` MCP header | canvas (HTTP API) |
+| **2. Network hijack** | Scripts connect to hardcoded `localhost` ports (IMAP/SMTP) | Monkeypatch `socket.getaddrinfo()` to redirect to remote IPs | email (IMAP/SMTP) |
+| **3. URL hijack** | Scripts make HTTP requests to hardcoded `localhost` URLs | Monkeypatch `requests`/`aiohttp` to rewrite URLs to external Canvas ingress | canvas (HTTP API) |
 | **4. File hijack** | Scripts read credentials from hardcoded file paths | Monkeypatch `builtins.open()` / `os.stat()` to redirect to temp files | google_sheets, google_forms, google_cloud |
 | **5. MCP tool call adaptation** | MCP tool expects a local file path the remote server can't access | Read file locally, pass contents as `json_string` instead of `import_path` | email (import_emails) |
 
@@ -518,10 +518,8 @@ all_token_key_session = Dict(
 4. `sitecustomize.py` patches `socket.getaddrinfo()`:
    ```python
    _REDIRECT_MAP = {
-       1143:  ("HIJACK_IMAP_HOST",   "HIJACK_IMAP_PORT"),    # IMAP
-       1587:  ("HIJACK_SMTP_HOST",   "HIJACK_SMTP_PORT"),    # SMTP
-       10001: ("HIJACK_CANVAS_HOST", "HIJACK_CANVAS_PORT"),  # Canvas LMS API
-       20001: ("HIJACK_CANVAS_HOST", "HIJACK_CANVAS_PORT"),  # Canvas LMS alt
+       1143: ("HIJACK_IMAP_HOST", "HIJACK_IMAP_PORT"),   # IMAP
+       1587: ("HIJACK_SMTP_HOST", "HIJACK_SMTP_PORT"),   # SMTP
    }
 
    def _hijacked_getaddrinfo(host, port, ...):
@@ -537,21 +535,34 @@ all_token_key_session = Dict(
 
 **Result:** The task script thinks it's connecting to `localhost:1143`, but actually connects to the Klavis email server. No script modification needed.
 
-**Canvas LMS** (`canvas`) uses the same socket hijack. Preprocess/eval scripts hardcode `localhost:10001` (and occasionally `localhost:20001`) for the Canvas API. The runner extracts `canvas_url` from the Canvas sandbox `auth_data` and sets `HIJACK_CANVAS_HOST` / `HIJACK_CANVAS_PORT`:
+### Strategy 3: URL Hijack (Canvas HTTP Rewrite)
 
-```python
-if sname == "canvas":
-    auth = server.get("auth_data") or {}
-    canvas_url = auth.get("canvas_url", "")
-    if canvas_url:
-        parsed = urlparse(canvas_url)
-        self.auth_env["HIJACK_CANVAS_HOST"] = parsed.hostname
-        self.auth_env["HIJACK_CANVAS_PORT"] = str(parsed.port or 3000)
-```
+**When used:** For **Canvas LMS** (`canvas`), where task preprocess/eval scripts hardcode `http://localhost:10001` (and occasionally `localhost:20001`) as the Canvas API base URL.
 
-Both ports 10001 and 20001 redirect to the same Canvas pod. No task script changes needed.
+**The problem:** Unlike email (raw TCP sockets), Canvas scripts make HTTP requests to a full URL. The Canvas sandbox provides `canvas_domain` (e.g., `34.61.162.164/{pod_id}`) — an external ingress with a **path prefix**. A socket-level host:port redirect can't inject a path prefix or switch protocol to HTTPS.
 
-### Strategy 3: File Hijack (open/stat Monkeypatch)
+**How it works:**
+
+1. The runner extracts `canvas_domain` from the Canvas sandbox `auth_data` and constructs the external base URL:
+   ```python
+   if sname == "canvas":
+       auth = server.get("auth_data") or {}
+       canvas_domain = auth.get("canvas_domain", "")
+       if canvas_domain:
+           self.auth_env["HIJACK_CANVAS_BASE_URL"] = f"https://{canvas_domain}"
+   ```
+
+2. `sitecustomize.py` patches `requests.Session.request()` and `aiohttp.ClientSession._request()` to rewrite any URL starting with `http://localhost:10001` or `http://localhost:20001` to the target base URL:
+   ```python
+   # http://localhost:10001/api/v1/courses
+   #   → https://34.61.162.164/{pod_id}/api/v1/courses
+   ```
+
+3. SSL verification is disabled for the redirected requests (the Canvas ingress uses a self-signed certificate).
+
+**Result:** `requests.get("http://localhost:10001/api/v1/courses")` is transparently rewritten to `https://34.61.162.164/{pod_id}/api/v1/courses`. No task script changes needed.
+
+### Strategy 4: File Hijack (open/stat Monkeypatch)
 
 **When used:** For **Google Sheets**, **Google Forms**, and **Google Cloud (GCP)**, where task scripts read credentials from hardcoded file paths.
 
@@ -612,7 +623,7 @@ def _build_subprocess_env(auth_env=None):
     # so sitecustomize.py is auto-loaded and applies monkeypatches
     if (env.get("HIJACK_IMAP_HOST")
             or env.get("HIJACK_SMTP_HOST")
-            or env.get("HIJACK_CANVAS_HOST")
+            or env.get("HIJACK_CANVAS_BASE_URL")
             or env.get("HIJACK_GOOGLE_CREDENTIALS_PATH")
             or env.get("HIJACK_GCP_SERVICE_ACCOUNT_PATH")):
         pythonpath_parts.insert(0, SOCKET_HIJACK_DIR)  # _hijack/ directory
@@ -640,9 +651,10 @@ If you are building your own Toolathlon runner (or adapting this code), here is 
    - Include `_hijack/` in `PYTHONPATH` for the subprocess.
    - The `_hijack/sitecustomize.py` module will auto-patch `socket.getaddrinfo()`.
 
-3. **For network hijack** (canvas):
-   - Parse `canvas_url` from `auth_data` and store as `HIJACK_CANVAS_HOST`, `HIJACK_CANVAS_PORT`. This redirects `localhost:10001` and `localhost:20001` to the real Canvas LMS pod.
+3. **For URL hijack** (canvas):
+   - Read `canvas_domain` from `auth_data` and set `HIJACK_CANVAS_BASE_URL=https://{canvas_domain}`. This rewrites `http://localhost:10001/...` and `http://localhost:20001/...` to the external Canvas ingress URL (which includes a path prefix for pod routing).
    - Include `_hijack/` in `PYTHONPATH` for the subprocess.
+   - `sitecustomize.py` patches `requests.Session.request()` and `aiohttp.ClientSession._request()` to rewrite matching URLs. SSL verification is disabled for these redirected requests.
    - The Canvas MCP server also requires an `x-canvas-api-token` header (per-task user token from `token_key_session.py`). The `canvas_domain` is resolved from `x-auth-data` (set by ingress from DB).
 
 4. **For file hijack** (Google Sheets/Forms/Cloud):
