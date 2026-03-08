@@ -102,6 +102,11 @@ _canvas_base_url = os.environ.get("HIJACK_CANVAS_BASE_URL", "")
 if _canvas_base_url:
     _canvas_target = _canvas_base_url.rstrip("/")
 
+    # Suppress InsecureRequestWarning for redirected Canvas requests
+    # (the Canvas ingress uses a self-signed certificate).
+    import urllib3 as _urllib3
+    _urllib3.disable_warnings(_urllib3.exceptions.InsecureRequestWarning)
+
     _CANVAS_LOCAL_PREFIXES = [
         "http://localhost:10001",
         "http://localhost:20001",
