@@ -6,18 +6,24 @@ HOW IT WORKS:
     on PYTHONPATH. By prepending the _hijack/ directory to PYTHONPATH in
     subprocess env, this module runs before the child script starts.
 
-    SOCKET PATCH:
-    It monkey-patches socket.getaddrinfo() so that:
+    SOCKET PATCH (email):
+    Monkey-patches socket.getaddrinfo() so that:
       - localhost:1143 → HIJACK_IMAP_HOST:HIJACK_IMAP_PORT  (IMAP)
       - localhost:1587 → HIJACK_SMTP_HOST:HIJACK_SMTP_PORT  (SMTP)
-      - All other connections (e.g. localhost:17362) pass through unchanged.
-
-    Both imaplib and smtplib use socket.getaddrinfo() under the hood, so this
+    imaplib and smtplib use socket.getaddrinfo() under the hood, so this
     catches all email connections before they're even attempted.
 
+    URL PATCH (Canvas):
+    Monkey-patches requests.Session.request() and aiohttp.ClientSession._request()
+    so that any HTTP request to http://localhost:10001/... or http://localhost:20001/...
+    is rewritten to https://{HIJACK_CANVAS_BASE_URL}/...
+    Canvas uses an external ingress with a path prefix (e.g. 34.61.162.164/{pod_id}),
+    so a socket-level host:port redirect is insufficient — we need full URL rewriting
+    to prepend the path prefix and switch to HTTPS.
+
     FILE OPEN PATCH:
-    It monkey-patches builtins.open(), io.open(), os.stat(), and
-    pathlib.Path.stat() so that:
+    Monkey-patches builtins.open(), io.open(), os.stat(), and pathlib.Path.stat()
+    so that:
       - Any open()/stat() of a path ending with
         'configs/google_credentials.json' is silently redirected to the
         temp file path given by HIJACK_GOOGLE_CREDENTIALS_PATH.
@@ -29,6 +35,7 @@ HOW IT WORKS:
 
 ACTIVATION:
     Socket patch activates if HIJACK_IMAP_HOST or HIJACK_SMTP_HOST is set.
+    URL patch activates if HIJACK_CANVAS_BASE_URL is set.
     File-open patch activates if HIJACK_GOOGLE_CREDENTIALS_PATH or
     HIJACK_GCP_SERVICE_ACCOUNT_PATH is set.
     If none of the HIJACK_* env vars are present, this module does nothing.
@@ -44,19 +51,20 @@ import os
 import socket
 import sys
 
+# ---------------------------------------------------------------------------
+# Socket patch: redirect email IMAP/SMTP connections
+# ---------------------------------------------------------------------------
+
 _orig_getaddrinfo = socket.getaddrinfo
 
-# Hosts we consider "local" — these are what the child scripts hardcode
 _LOCAL_HOSTS = frozenset({"localhost", "127.0.0.1", "::1"})
 
-# Map of hardcoded port → (env var for replacement host, env var for replacement port)
 _REDIRECT_MAP = {
     1143: ("HIJACK_IMAP_HOST", "HIJACK_IMAP_PORT"),
     1587: ("HIJACK_SMTP_HOST", "HIJACK_SMTP_PORT"),
 }
 
-# Only patch if at least one redirect env var is actually set
-_any_redirect = any(os.environ.get(h) for _, (h, _) in _REDIRECT_MAP.items())
+_any_socket_redirect = any(os.environ.get(h) for _, (h, _) in _REDIRECT_MAP.items())
 
 
 def _hijacked_getaddrinfo(host, port, family=0, type=0, proto=0, flags=0):
@@ -81,8 +89,74 @@ def _hijacked_getaddrinfo(host, port, family=0, type=0, proto=0, flags=0):
     return _orig_getaddrinfo(host, port, family, type, proto, flags)
 
 
-if _any_redirect:
+if _any_socket_redirect:
     socket.getaddrinfo = _hijacked_getaddrinfo
+
+
+# ---------------------------------------------------------------------------
+# URL patch: rewrite Canvas HTTP requests from localhost to external ingress
+# ---------------------------------------------------------------------------
+
+_canvas_base_url = os.environ.get("HIJACK_CANVAS_BASE_URL", "")
+
+if _canvas_base_url:
+    _canvas_target = _canvas_base_url.rstrip("/")
+
+    # Suppress InsecureRequestWarning for redirected Canvas requests
+    # (the Canvas ingress uses a self-signed certificate).
+    import urllib3 as _urllib3
+    _urllib3.disable_warnings(_urllib3.exceptions.InsecureRequestWarning)
+
+    _CANVAS_LOCAL_PREFIXES = [
+        "http://localhost:10001",
+        "http://localhost:20001",
+        "http://127.0.0.1:10001",
+        "http://127.0.0.1:20001",
+    ]
+
+    def _rewrite_canvas_url(url):
+        """Replace local Canvas URL prefix with the external ingress URL."""
+        url_str = str(url)
+        for prefix in _CANVAS_LOCAL_PREFIXES:
+            if url_str.startswith(prefix):
+                return _canvas_target + url_str[len(prefix):]
+        return None
+
+    # Patch requests.Session.request
+    try:
+        import requests as _requests
+
+        _orig_requests_request = _requests.Session.request
+
+        def _hijacked_requests_request(self, method, url, **kwargs):
+            new_url = _rewrite_canvas_url(url)
+            if new_url is not None:
+                print(f"[canvas_hijack] {url} -> {new_url}", file=sys.stderr)
+                url = new_url
+                kwargs.setdefault("verify", False)
+            return _orig_requests_request(self, method, url, **kwargs)
+
+        _requests.Session.request = _hijacked_requests_request
+    except ImportError:
+        pass
+
+    # Patch aiohttp.ClientSession._request
+    try:
+        import aiohttp as _aiohttp
+
+        _orig_aiohttp_request = _aiohttp.ClientSession._request
+
+        async def _hijacked_aiohttp_request(self, method, url, **kwargs):
+            new_url = _rewrite_canvas_url(url)
+            if new_url is not None:
+                print(f"[canvas_hijack] {url} -> {new_url}", file=sys.stderr)
+                url = new_url
+                kwargs.setdefault("ssl", False)
+            return await _orig_aiohttp_request(self, method, url, **kwargs)
+
+        _aiohttp.ClientSession._request = _hijacked_aiohttp_request
+    except ImportError:
+        pass
 
 
 # ---------------------------------------------------------------------------

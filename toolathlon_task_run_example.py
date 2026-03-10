@@ -107,6 +107,7 @@ LOCAL_SANDBOX_SERVERS = {
     "arxiv", "excel", "word", "powerpoint",
     "code-executor", "code-runner", "pdf-tools",
     "google_cloud", "poste_email_toolathlon", "localmemory",
+    "canvas",
 }
 
 TASK_TO_LOCAL_SANDBOX_NAME = {
@@ -282,6 +283,18 @@ class KlavisSandbox:
                             self.auth_env["HIJACK_SMTP_HOST"] = str(auth["smtp_server"])
                             self.auth_env["HIJACK_SMTP_PORT"] = str(auth.get("smtp_port", 1587))
                             print(f"[Klavis] Email hijack: SMTP -> {auth['smtp_server']}:{auth.get('smtp_port', 1587)}")
+                    # Extract Canvas auth_data for URL-level hijacking.
+                    # Child preprocess/eval scripts hardcode http://localhost:10001
+                    # (and occasionally localhost:20001) for the Canvas LMS API.
+                    # We rewrite these URLs to the external Canvas ingress via
+                    # HIJACK_CANVAS_BASE_URL (e.g. https://34.61.162.164/{pod_id}).
+                    if sname == "canvas":
+                        auth = server.get("auth_data") or {}
+                        canvas_domain = auth.get("canvas_domain", "")
+                        if canvas_domain:
+                            base_url = f"https://{canvas_domain}" if not canvas_domain.startswith("http") else canvas_domain
+                            self.auth_env["HIJACK_CANVAS_BASE_URL"] = base_url
+                            print(f"[Klavis] Canvas hijack: localhost:10001/20001 -> {base_url}")
                     # Extract GCP service-account auth_data for file-open hijacking.
                     # Child preprocess/eval scripts open configs/gcp-service_account.keys.json;
                     # we write the real credentials to a temp file and redirect via HIJACK_*.
@@ -629,6 +642,22 @@ def load_task(task_name: str) -> dict:
         emails_config_path = task_dir / "email_config.json"
     emails_config = json.loads(emails_config_path.read_text()) if emails_config_path.exists() else None
 
+    # Load canvas_api_token from the task's token_key_session.py (if present).
+    # This per-task user token is sent as the x-canvas-api-token header to the
+    # Klavis Canvas MCP server so it operates as the correct student/teacher persona.
+    canvas_api_token = None
+    tks_path = task_dir / "token_key_session.py"
+    if tks_path.exists() and "canvas" in needed_servers:
+        try:
+            spec = importlib.util.spec_from_file_location("_tks_canvas", tks_path)
+            mod = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(mod)
+            session = getattr(mod, "all_token_key_session", {})
+            canvas_api_token = session.get("canvas_api_token") or None
+            print(f"[Klavis] Canvas API token: {canvas_api_token}")
+        except Exception as e:
+            print(f"{_YELLOW}[warn] Failed to load canvas_api_token from {tks_path}: {e}{_RST}")
+
     return {
         "name": task_name,
         "needed_servers": needed_servers,
@@ -639,6 +668,7 @@ def load_task(task_name: str) -> dict:
         "eval_dir": task_dir / "evaluation",
         "groundtruth_workspace": str(groundtruth_ws) if groundtruth_ws.exists() else None,
         "emails_config": emails_config,
+        "canvas_api_token": canvas_api_token,
     }
 
 
@@ -683,9 +713,10 @@ def _build_subprocess_env(auth_env: Optional[Dict[str, str]] = None) -> Dict[str
         env.update(auth_env)
     # If any hijack env vars are set, prepend _hijack/ so that
     # sitecustomize.py is auto-loaded and applies the relevant monkeypatches
-    # (socket redirect for IMAP/SMTP, file-open redirect for Google creds).
+    # (socket redirect for IMAP/SMTP, URL rewrite for Canvas, file-open for creds).
     if (env.get("HIJACK_IMAP_HOST")
             or env.get("HIJACK_SMTP_HOST")
+            or env.get("HIJACK_CANVAS_BASE_URL")
             or env.get("HIJACK_GOOGLE_CREDENTIALS_PATH")
             or env.get("HIJACK_GCP_SERVICE_ACCOUNT_PATH")):
         pythonpath_parts.insert(0, SOCKET_HIJACK_DIR)
@@ -935,6 +966,12 @@ async def run_task(
             email_cfg_b64 = base64.b64encode(json.dumps(header_payload).encode()).decode()
             server_headers["emails"] = {"x-email-config": email_cfg_b64}
             print(f"  {_YELLOW}Email config header set for: {header_payload['email']}{_RST}")
+
+        # The per-task Canvas API token is sent as x-canvas-api-token.
+        canvas_api_token = task.get("canvas_api_token")
+        if canvas_api_token and "canvas" in server_urls:
+            server_headers["canvas"] = {"x-canvas-api-token": canvas_api_token}
+            print(f"  {_YELLOW}Canvas API token header set (token: {canvas_api_token[:12]}...){_RST}")
 
         # Inject KLAVIS_MCP_SERVER_URLS into auth_env so that child processes
         # (preprocess/evaluation scripts) using utils.mcp.tool_servers can
