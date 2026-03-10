@@ -64,7 +64,7 @@ LOCAL_TOOL_MAPPINGS = {
 
 TASKS_DIR = PROJECT_ROOT # change to your directory where you put the tasks
 OUTPUT_DIR = PROJECT_ROOT
-DEFAULT_MODEL = "litellm/openrouter/minimax/minimax-m2.5"
+DEFAULT_MODEL = "litellm/gemini/gemini-3-flash-preview"
 
 def _ansi(code: str) -> str:
     return code if sys.stdout.isatty() else ""
@@ -635,28 +635,34 @@ def load_task(task_name: str) -> dict:
 
     groundtruth_ws = task_dir / "groundtruth_workspace"
 
-    # Load email credentials if present (used as x-email-config header for the emails MCP server)
-    # Some tasks use "emails_config.json", others use "email_config.json".
-    emails_config_path = task_dir / "emails_config.json"
-    if not emails_config_path.exists():
-        emails_config_path = task_dir / "email_config.json"
-    emails_config = json.loads(emails_config_path.read_text()) if emails_config_path.exists() else None
-
-    # Load canvas_api_token from the task's token_key_session.py (if present).
-    # This per-task user token is sent as the x-canvas-api-token header to the
-    # Klavis Canvas MCP server so it operates as the correct student/teacher persona.
+    # Load token_key_session.py — it's the single source of truth for per-task credentials (email config path, canvas token, etc.).
+    emails_config = None
     canvas_api_token = None
     tks_path = task_dir / "token_key_session.py"
-    if tks_path.exists() and "canvas" in needed_servers:
+    session = {}
+    if tks_path.exists():
         try:
-            spec = importlib.util.spec_from_file_location("_tks_canvas", tks_path)
+            spec = importlib.util.spec_from_file_location("_tks", tks_path)
             mod = importlib.util.module_from_spec(spec)
             spec.loader.exec_module(mod)
             session = getattr(mod, "all_token_key_session", {})
-            canvas_api_token = session.get("canvas_api_token") or None
-            print(f"[Klavis] Canvas API token: {canvas_api_token}")
         except Exception as e:
-            print(f"{_YELLOW}[warn] Failed to load canvas_api_token from {tks_path}: {e}{_RST}")
+            print(f"{_YELLOW}[warn] Failed to load token_key_session from {tks_path}: {e}{_RST}")
+
+    # Email config: prefer path declared in token_key_session, fall back to conventional names.
+    emails_cfg_path = session.get("emails_config_file")
+    if emails_cfg_path and Path(emails_cfg_path).exists():
+        emails_config = json.loads(Path(emails_cfg_path).read_text())
+    else:
+        for candidate in ("emails_config.json", "email_config.json"):
+            p = task_dir / candidate
+            if p.exists():
+                emails_config = json.loads(p.read_text())
+                break
+
+    canvas_api_token = session.get("canvas_api_token") or None
+    if canvas_api_token:
+        print(f"[Klavis] Canvas API token: {canvas_api_token}")
 
     return {
         "name": task_name,
