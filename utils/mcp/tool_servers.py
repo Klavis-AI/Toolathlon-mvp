@@ -155,6 +155,18 @@ class MCPServerManager:
                     await cm
                     self._active_cms[name] = server
                     self.connected_servers[name] = server
+                    # Patch emails server so direct call_tool("import_emails")
+                    # with import_path works the same as call_tool_with_retry
+                    if name == "emails":
+                        _orig_call_tool = server.call_tool
+                        async def _patched_call_tool(tool_name, arguments, *args, _orig=_orig_call_tool, **kwargs):
+                            if tool_name == "import_emails" and arguments and "import_path" in arguments:
+                                with open(arguments["import_path"], "r", encoding="utf-8") as f:
+                                    json_content = f.read()
+                                arguments = {k: v for k, v in arguments.items() if k != "import_path"}
+                                arguments["json_string"] = json_content
+                            return await _orig(tool_name, arguments, *args, **kwargs)
+                        server.call_tool = _patched_call_tool
                     if self.debug:
                         print(f"  - Connected: {name} (attempt {attempt + 1})")
                     break
