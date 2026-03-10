@@ -859,8 +859,9 @@ def evaluate(task: dict, workspace_path: str, auth_env: Optional[Dict[str, str]]
                 sys.executable, "-m", f"{eval_dir.name}.main",
                 "--agent_workspace", workspace_path, "--res_log_file", str(res_log_file),
             ]
-            if task.get("groundtruth_workspace"):
-                cmd += ["--groundtruth_workspace", task["groundtruth_workspace"]]
+            # always pass groundtruth_workspace
+            groundtruth_ws = task.get("groundtruth_workspace") or str(TASKS_DIR / task["name"] / "groundtruth_workspace")
+            cmd += ["--groundtruth_workspace", groundtruth_ws]
             if launch_time:
                 cmd += ["--launch_time", launch_time]
             return subprocess.run(
