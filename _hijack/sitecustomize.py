@@ -131,7 +131,7 @@ if _canvas_base_url:
         def _hijacked_requests_request(self, method, url, **kwargs):
             new_url = _rewrite_canvas_url(url)
             if new_url is not None:
-                print(f"[canvas_hijack] {url} -> {new_url}", file=sys.stderr)
+                # print(f"[canvas_hijack] {url} -> {new_url}", file=sys.stderr)
                 url = new_url
                 kwargs.setdefault("verify", False)
             return _orig_requests_request(self, method, url, **kwargs)
@@ -149,7 +149,7 @@ if _canvas_base_url:
         async def _hijacked_aiohttp_request(self, method, url, **kwargs):
             new_url = _rewrite_canvas_url(url)
             if new_url is not None:
-                print(f"[canvas_hijack] {url} -> {new_url}", file=sys.stderr)
+                # print(f"[canvas_hijack] {url} -> {new_url}", file=sys.stderr)
                 url = new_url
                 kwargs.setdefault("ssl", False)
             return await _orig_aiohttp_request(self, method, url, **kwargs)
