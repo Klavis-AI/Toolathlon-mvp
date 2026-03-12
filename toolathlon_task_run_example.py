@@ -19,6 +19,7 @@ import sys
 import shutil
 import subprocess
 import tempfile
+import time
 import tarfile
 import importlib.util
 import argparse
@@ -334,13 +335,23 @@ class KlavisSandbox:
         if not mapping:
             return
         details = self.get_sandbox_details(server_name, sandbox_id) or {}
+        if not details:
+            print(f"[Klavis] WARNING: No sandbox details returned for '{server_name}' — "
+                  f"credentials will NOT be injected for preprocess/eval scripts!")
+            return
         auth = details.get("auth_data") or {}
         meta = details.get("metadata") or {}
+        injected = 0
         for key, env_var in mapping.items():
             val = auth.get(key) if auth.get(key) is not None else meta.get(key)
             if val is not None:
                 self.auth_env[env_var] = str(val)
                 print(f"[Klavis] Set {env_var}")
+                injected += 1
+        if injected == 0:
+            print(f"[Klavis] WARNING: auth_data for '{server_name}' was empty — "
+                  f"no credentials injected. Keys in auth_data: {list(auth.keys())}, "
+                  f"keys in metadata: {list(meta.keys())}")
 
         if server_name == "notion":
             ## set the notion official mcp access token, because Toolathlon preprocess scripts need use the official notion mcp to duplicate pages
@@ -448,17 +459,23 @@ class KlavisSandbox:
                     pass
                 setattr(self, attr, None)
 
-    def get_sandbox_details(self, server_name: str, sandbox_id: str) -> Optional[Dict]:
+    def get_sandbox_details(self, server_name: str, sandbox_id: str, retries: int = 3) -> Optional[Dict]:
         """Get detailed information about a specific sandbox instance."""
         url = f"{KLAVIS_API_BASE}/sandbox/{server_name}/{sandbox_id}"
         headers = {"Authorization": f"Bearer {self.api_key}"}
-        try:
-            resp = httpx.get(url, headers=headers, timeout=30)
-            resp.raise_for_status()
-            return resp.json()
-        except Exception as e:
-            print(f"[Klavis] Failed to get sandbox details for '{sandbox_id}': {e}")
-            return None
+        for attempt in range(1, retries + 1):
+            try:
+                resp = httpx.get(url, headers=headers, timeout=60)
+                resp.raise_for_status()
+                return resp.json()
+            except Exception as e:
+                print(f"[Klavis] Attempt {attempt}/{retries} failed to get sandbox details for '{sandbox_id}': {e}")
+                if attempt < retries:
+                    wait = 5 * attempt
+                    print(f"[Klavis] Retrying in {wait}s...")
+                    time.sleep(wait)
+        print(f"[Klavis] All {retries} attempts failed for sandbox details '{sandbox_id}'")
+        return None
 
     def release_all(self):
         """Release all acquired sandboxes."""
