@@ -3,94 +3,87 @@
 > **Total tasks:** 108 (from `tasks/finalpool/`)  
 > **Supported (MCP servers available):** 75 | **Not supported:** 33
 
-### Klavis Status Legend
-
-| Status | Meaning |
-|--------|---------|
-| `ready` | Task can be run end-to-end via Klavis sandbox using `toolathlon_task_run_example.py` |
-| `pending` | Sandbox is supported but cannot run via `toolathlon_task_run_example.py` |
-
 ---
 
 ## Supported Tasks
 
-| # | Task Name | MCP Servers | Klavis Status |
-|---|-----------|-------------|:------------:|
-| 1 | `ab-testing` | google-cloud, filesystem | `ready` |
-| 2 | `academic-pdf-report` | playwright_with_chunk, excel, terminal, arxiv_local, pdf-tools, fetch | `pending` |
-| 3 | `academic-warning` | google-cloud, excel, filesystem | `ready` |
-| 4 | `apply-phd-email` | filesystem, memory, emails, terminal, pdf-tools | `ready` |
-| 5 | `arrange-workspace` | filesystem, terminal, pdf-tools, excel | `ready` |
-| 6 | `canvas-arrange-exam` | canvas, emails, memory, terminal | `pending` |
-| 7 | `canvas-art-manager` | filesystem, canvas, terminal, emails | `pending` |
-| 8 | `canvas-art-quiz` | filesystem, canvas, terminal | `pending` |
-| 9 | `canvas-do-quiz` | memory, canvas | `pending` |
-| 10 | `canvas-homework-grader-python` | canvas, filesystem, terminal, emails | `pending` |
-| 11 | `canvas-list-test` | canvas, memory | `pending` |
-| 12 | `canvas-new-students-notification` | filesystem, terminal, canvas | `pending` |
-| 13 | `canvas-submit-late-work` | canvas, memory, filesystem, emails | `pending` |
-| 14 | `course-assistant` | excel, emails, filesystem, terminal | `ready` |
-| 15 | `course-schedule` | filesystem, memory, excel, pdf-tools, fetch | `pending` |
-| 16 | `courses-ta-hws` | terminal, excel, filesystem | `ready` |
-| 17 | `cvpr-research` | filesystem, fetch, playwright_with_chunk | `pending` |
-| 18 | `dataset-license-issue` | huggingface, github, terminal, fetch | `pending` |
-| 19 | `detect-revised-terms` | filesystem, pdf-tools | `ready` |
-| 20 | `email-paper-homepage` | emails, github | `ready` |
-| 21 | `excel-data-transformation` | excel, filesystem, terminal | `ready` |
-| 22 | `excel-market-research` | excel, filesystem, terminal | `ready` |
-| 23 | `experiments-recordings` | notion, wandb, terminal, filesystem | `ready` |
-| 24 | `fillout-online-forms` | playwright_with_chunk, memory, filesystem | `pending` |
-| 25 | `filter-low-selling-products` | woocommerce, filesystem, emails | `ready` |
-| 26 | `flagged-transactions` | google-cloud, excel, terminal, filesystem | `ready` |
-| 27 | `game-statistics` | google-cloud, terminal | `ready` |
-| 28 | `gdp-cr5-analysis` | google_sheet, playwright_with_chunk, fetch | `pending` |
-| 29 | `git-bug-hunt` | git, terminal, filesystem, emails | `ready` |
-| 30 | `git-milestone` | filesystem, terminal, fetch | `pending` |
-| 31 | `git-repo` | github, filesystem, pdf-tools | `ready` |
-| 32 | `hk-top-conf` | filesystem, terminal, playwright_with_chunk, fetch | `pending` |
-| 33 | `huggingface-upload` | filesystem, terminal, huggingface | `ready` |
-| 34 | `imagenet` | filesystem, pdf-tools | `ready` |
-| 35 | `inter-final-performance-analysis` | filesystem, playwright_with_chunk, google_sheet, terminal, fetch | `pending` |
-| 36 | `interview-report` | filesystem, word | `ready` |
-| 37 | `inventory-sync` | woocommerce, filesystem | `ready` |
-| 38 | `landing-task-reminder` | emails, snowflake, pdf-tools, filesystem | `ready` |
-| 39 | `language-school` | filesystem, playwright_with_chunk, excel, fetch, terminal | `pending` |
-| 40 | `live-transactions` | google-cloud, filesystem | `ready` |
-| 41 | `machine-operating` | google-cloud, filesystem, excel | `ready` |
-| 42 | `meeting-assign` | fetch, emails, playwright_with_chunk, filesystem | `pending` |
-| 43 | `merge-hf-datasets` | huggingface, terminal, filesystem | `ready` |
-| 44 | `music-analysis` | excel, google_sheet, terminal | `ready` |
-| 45 | `nhl-b2b-analysis` | google_sheet, filesystem, terminal | `ready` |
-| 46 | `notion-hr` | filesystem, emails, notion, pdf-tools | `ready` |
-| 47 | `notion-movies` | playwright_with_chunk, notion, fetch | `pending` |
-| 48 | `notion-personal-website` | filesystem, word, notion | `ready` |
-| 49 | `paper-checker` | filesystem, terminal | `ready` |
-| 50 | `payable-invoice-checker` | emails, pdf-tools, filesystem, snowflake | `ready` |
-| 51 | `personal-website-construct` | memory, github | `ready` |
-| 52 | `ppt-analysis` | pptx, filesystem, pdf-tools | `ready` |
-| 53 | `price-comparison` | filesystem, terminal, pdf-tools, google-cloud | `ready` |
-| 54 | `privacy-desensitization` | filesystem, terminal | `ready` |
-| 55 | `reimbursement-form-filler` | filesystem, excel, pdf-tools, terminal | `ready` |
-| 56 | `sales-accounting` | memory, excel, filesystem | `ready` |
-| 57 | `set-conf-cr-ddl` | emails, google_calendar | `ready` |
-| 58 | `shopping-helper` | filesystem, playwright_with_chunk | `pending` |
-| 59 | `sla-timeout-monitor` | emails, snowflake, filesystem, pdf-tools, terminal | `ready` |
-| 60 | `student-interview` | emails, google_calendar | `ready` |
-| 61 | `sync-todo-to-readme` | git, github | `ready` |
-| 62 | `task-tracker` | github, notion | `ready` |
-| 63 | `travel-expense-reimbursement` | emails, snowflake, pdf-tools, filesystem | `ready` |
-| 64 | `university-course-selection` | filesystem, pdf-tools, terminal, excel | `ready` |
-| 65 | `update-material-inventory` | google_sheet, woocommerce | `ready` |
-| 66 | `verl-dataset` | huggingface, filesystem, fetch | `pending` |
-| 67 | `vlm-history-completer` | playwright_with_chunk, google_sheet, arxiv_local, huggingface, fetch | `pending` |
-| 68 | `wandb-best-score` | wandb, filesystem, terminal | `ready` |
-| 69 | `wandb-shortest-length` | wandb, filesystem, terminal, excel | `ready` |
-| 70 | `woocommerce-customer-survey` | woocommerce, emails, google_forms, filesystem | `ready` |
-| 71 | `woocommerce-new-product` | woocommerce, filesystem, emails | `ready` |
-| 72 | `woocommerce-new-welcome` | woocommerce, filesystem, terminal, google-cloud, emails | `ready` |
-| 73 | `woocommerce-product-recall` | woocommerce, emails, google_forms, filesystem | `ready` |
-| 74 | `woocommerce-stock-alert` | woocommerce, google_sheet, emails, filesystem | `ready` |
-| 75 | `woocommerce-update-cover` | woocommerce | `ready` |
+| # | Task Name | MCP Servers |
+|---|-----------|-------------|
+| 1 | `ab-testing` | google-cloud, filesystem |
+| 2 | `academic-pdf-report` | playwright_with_chunk, excel, terminal, arxiv_local, pdf-tools, fetch |
+| 3 | `academic-warning` | google-cloud, excel, filesystem |
+| 4 | `apply-phd-email` | filesystem, memory, emails, terminal, pdf-tools |
+| 5 | `arrange-workspace` | filesystem, terminal, pdf-tools, excel |
+| 6 | `canvas-arrange-exam` | canvas, emails, memory, terminal |
+| 7 | `canvas-art-manager` | filesystem, canvas, terminal, emails |
+| 8 | `canvas-art-quiz` | filesystem, canvas, terminal |
+| 9 | `canvas-do-quiz` | memory, canvas |
+| 10 | `canvas-homework-grader-python` | canvas, filesystem, terminal, emails |
+| 11 | `canvas-list-test` | canvas, memory |
+| 12 | `canvas-new-students-notification` | filesystem, terminal, canvas |
+| 13 | `canvas-submit-late-work` | canvas, memory, filesystem, emails |
+| 14 | `course-assistant` | excel, emails, filesystem, terminal |
+| 15 | `course-schedule` | filesystem, memory, excel, pdf-tools, fetch |
+| 16 | `courses-ta-hws` | terminal, excel, filesystem |
+| 17 | `cvpr-research` | filesystem, fetch, playwright_with_chunk |
+| 18 | `dataset-license-issue` | huggingface, github, terminal, fetch |
+| 19 | `detect-revised-terms` | filesystem, pdf-tools |
+| 20 | `email-paper-homepage` | emails, github |
+| 21 | `excel-data-transformation` | excel, filesystem, terminal |
+| 22 | `excel-market-research` | excel, filesystem, terminal |
+| 23 | `experiments-recordings` | notion, wandb, terminal, filesystem |
+| 24 | `fillout-online-forms` | playwright_with_chunk, memory, filesystem |
+| 25 | `filter-low-selling-products` | woocommerce, filesystem, emails |
+| 26 | `flagged-transactions` | google-cloud, excel, terminal, filesystem |
+| 27 | `game-statistics` | google-cloud, terminal |
+| 28 | `gdp-cr5-analysis` | google_sheet, playwright_with_chunk, fetch |
+| 29 | `git-bug-hunt` | git, terminal, filesystem, emails |
+| 30 | `git-milestone` | filesystem, terminal, fetch |
+| 31 | `git-repo` | github, filesystem, pdf-tools |
+| 32 | `hk-top-conf` | filesystem, terminal, playwright_with_chunk, fetch |
+| 33 | `huggingface-upload` | filesystem, terminal, huggingface |
+| 34 | `imagenet` | filesystem, pdf-tools |
+| 35 | `inter-final-performance-analysis` | filesystem, playwright_with_chunk, google_sheet, terminal, fetch |
+| 36 | `interview-report` | filesystem, word |
+| 37 | `inventory-sync` | woocommerce, filesystem |
+| 38 | `landing-task-reminder` | emails, snowflake, pdf-tools, filesystem |
+| 39 | `language-school` | filesystem, playwright_with_chunk, excel, fetch, terminal |
+| 40 | `live-transactions` | google-cloud, filesystem |
+| 41 | `machine-operating` | google-cloud, filesystem, excel |
+| 42 | `meeting-assign` | fetch, emails, playwright_with_chunk, filesystem |
+| 43 | `merge-hf-datasets` | huggingface, terminal, filesystem |
+| 44 | `music-analysis` | excel, google_sheet, terminal |
+| 45 | `nhl-b2b-analysis` | google_sheet, filesystem, terminal |
+| 46 | `notion-hr` | filesystem, emails, notion, pdf-tools |
+| 47 | `notion-movies` | playwright_with_chunk, notion, fetch |
+| 48 | `notion-personal-website` | filesystem, word, notion |
+| 49 | `paper-checker` | filesystem, terminal |
+| 50 | `payable-invoice-checker` | emails, pdf-tools, filesystem, snowflake |
+| 51 | `personal-website-construct` | memory, github |
+| 52 | `ppt-analysis` | pptx, filesystem, pdf-tools |
+| 53 | `price-comparison` | filesystem, terminal, pdf-tools, google-cloud |
+| 54 | `privacy-desensitization` | filesystem, terminal |
+| 55 | `reimbursement-form-filler` | filesystem, excel, pdf-tools, terminal |
+| 56 | `sales-accounting` | memory, excel, filesystem |
+| 57 | `set-conf-cr-ddl` | emails, google_calendar |
+| 58 | `shopping-helper` | filesystem, playwright_with_chunk |
+| 59 | `sla-timeout-monitor` | emails, snowflake, filesystem, pdf-tools, terminal |
+| 60 | `student-interview` | emails, google_calendar |
+| 61 | `sync-todo-to-readme` | git, github |
+| 62 | `task-tracker` | github, notion |
+| 63 | `travel-expense-reimbursement` | emails, snowflake, pdf-tools, filesystem |
+| 64 | `university-course-selection` | filesystem, pdf-tools, terminal, excel |
+| 65 | `update-material-inventory` | google_sheet, woocommerce |
+| 66 | `verl-dataset` | huggingface, filesystem, fetch |
+| 67 | `vlm-history-completer` | playwright_with_chunk, google_sheet, arxiv_local, huggingface, fetch |
+| 68 | `wandb-best-score` | wandb, filesystem, terminal |
+| 69 | `wandb-shortest-length` | wandb, filesystem, terminal, excel |
+| 70 | `woocommerce-customer-survey` | woocommerce, emails, google_forms, filesystem |
+| 71 | `woocommerce-new-product` | woocommerce, filesystem, emails |
+| 72 | `woocommerce-new-welcome` | woocommerce, filesystem, terminal, google-cloud, emails |
+| 73 | `woocommerce-product-recall` | woocommerce, emails, google_forms, filesystem |
+| 74 | `woocommerce-stock-alert` | woocommerce, google_sheet, emails, filesystem |
+| 75 | `woocommerce-update-cover` | woocommerce |
 
 ---
 
