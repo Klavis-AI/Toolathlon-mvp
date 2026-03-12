@@ -276,6 +276,13 @@ if __name__=="__main__":
     # Part 1: Create the new form
     form_id = create_google_form(service, GOOGLE_FORM_NAME)
     
+    # Make the form publicly accessible
+    drive_service = build('drive', 'v3', credentials=creds)
+    drive_service.permissions().create(
+        fileId=form_id,
+        body={'type': 'anyone', 'role': 'reader'},
+    ).execute()
+    
     # Generate URLs
     form_public_url = f"https://docs.google.com/forms/d/{form_id}/viewform"
     form_drive_url = f"https://docs.google.com/forms/d/{form_id}/edit"

@@ -117,6 +117,7 @@ if __name__ == "__main__":
 
     print("🚀 Meeting Assign - Evaluation")
     success, message = check_local_email()
+    subprocess.run("kill -9 $(lsof -ti:30137) 2>/dev/null", shell=True)
     
     # Final result
     print("=" * 50)

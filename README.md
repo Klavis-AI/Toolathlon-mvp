@@ -250,7 +250,7 @@ python toolathlon_task_run_example.py --task tasks/finalpool/arrange-workspace
 # Multiple tasks in parallel (each task logs to logs/<run>/)
 python toolathlon_task_run_example.py --tasks tasks/finalpool/arrange-workspace tasks/finalpool/git-repo
 
-# All 52 supported tasks (default when no --task/--tasks given)
+# All 75 supported tasks (default when no --task/--tasks given)
 python toolathlon_task_run_example.py --parallel 5
 ```
 
@@ -337,6 +337,7 @@ LOCAL_SANDBOX_SERVERS = {
     "arxiv", "excel", "word", "powerpoint",
     "code-executor", "code-runner", "pdf-tools",
     "google_cloud", "poste_email_toolathlon", "canvas",
+    "playwright",
 }
 
 # Everything else → Individual Sandbox
@@ -418,8 +419,32 @@ Some task-defined server names differ from the Klavis API names. Two mapping dic
 
 | Dict | Purpose | Example |
 |---|---|---|
-| `TASK_TO_LOCAL_SANDBOX_NAME` | Task server name → Klavis local sandbox name | `"pptx"` → `"powerpoint"` |
+| `TASK_TO_LOCAL_SANDBOX_NAME` | Task server name → Klavis local sandbox name | `"pptx"` → `"powerpoint"`, `"playwright_with_chunk"` → `"playwright"` |
 | `TASK_SERVER_TO_SANDBOX_NAME` | Task server name → Klavis individual sandbox name | `"google_sheet"` → `"google_sheets"` |
+
+### Extra Preprocess/Eval Servers
+
+Some tasks need additional sandbox servers **only** for their preprocess or evaluation scripts — the agent itself never uses them. These are listed in `EXTRA_PREPROCESS_EVAL_SERVERS`:
+
+```python
+EXTRA_PREPROCESS_EVAL_SERVERS = {
+    "fillout-online-forms": ["google_forms"],
+}
+```
+
+These servers are acquired alongside the task's `needed_mcp_servers` so credentials are available to preprocess/eval scripts, but they are **not** exposed to the agent as MCP tools.
+
+### Task-Specific Script Fixes
+
+These are changes made to task scripts in `tasks/finalpool/` compared to the upstream `Toolathlon/tasks/finalpool/`:
+
+| Task(s) | Script | Change |
+|---|---|---|
+| 8 WooCommerce tasks (`filter-low-selling-products`, `inventory-sync`, `update-material-inventory`, `woocommerce-customer-survey`, `woocommerce-new-product`, `woocommerce-new-welcome`, `woocommerce-product-recall`, `woocommerce-stock-alert`) | `token_key_session.py` | Hardcoded WooCommerce credentials replaced with `os.environ.get("KLAVIS_WOOCOMMERCE_*", <original_fallback>)` for `api_key`, `api_secret`, `site_url`. |
+| `woocommerce-update-cover` | `token_key_session.py` | Same as above, plus `admin_username` / `admin_password` also read from `KLAVIS_WOOCOMMERCE_ADMIN_*` env vars. |
+| `course-assistant` | `preprocess/send_email.py` | Changed `use_auth=False` → `use_auth=True` for `LocalEmailSender` (required by Klavis email server). |
+| `fillout-online-forms` | `preprocess/main.py` | Makes the created Google Form **publicly accessible** via Drive API (`permissions().create()` with `type: anyone, role: reader`). |
+| `meeting-assign` | `evaluation/main.py` | Kills lingering process on port 30137 after the email check, preventing it from blocking subsequent runs. |
 
 ---
 
@@ -539,7 +564,7 @@ all_token_key_session = Dict(
 
 **When used:** For **Canvas LMS** (`canvas`), where task preprocess/eval scripts hardcode `http://localhost:10001` (and occasionally `localhost:20001`) as the Canvas API base URL.
 
-**The problem:** Unlike email (raw TCP sockets), Canvas scripts make HTTP requests to a full URL. The Canvas sandbox provides `canvas_domain` (e.g., `34.61.162.164/{pod_id}`) — an external ingress with a **path prefix**. A socket-level host:port redirect can't inject a path prefix or switch protocol to HTTPS.
+**The problem:** Unlike email (raw TCP sockets), Canvas scripts make HTTP requests to a full URL. The Canvas sandbox provides `canvas_domain` (e.g., `<ingress-host>/{pod_id}`) — an external ingress with a **path prefix**. A socket-level host:port redirect can't inject a path prefix or switch protocol to HTTPS.
 
 **How it works:**
 
@@ -555,12 +580,12 @@ all_token_key_session = Dict(
 2. `sitecustomize.py` patches `requests.Session.request()` and `aiohttp.ClientSession._request()` to rewrite any URL starting with `http://localhost:10001` or `http://localhost:20001` to the target base URL:
    ```python
    # http://localhost:10001/api/v1/courses
-   #   → https://34.61.162.164/{pod_id}/api/v1/courses
+   #   → https://<ingress-host>/{pod_id}/api/v1/courses
    ```
 
 3. SSL verification is disabled for the redirected requests (the Canvas ingress uses a self-signed certificate).
 
-**Result:** `requests.get("http://localhost:10001/api/v1/courses")` is transparently rewritten to `https://34.61.162.164/{pod_id}/api/v1/courses`. No task script changes needed.
+**Result:** `requests.get("http://localhost:10001/api/v1/courses")` is transparently rewritten to `https://<ingress-host>/{pod_id}/api/v1/courses`. No task script changes needed.
 
 ### Strategy 4: File Hijack (open/stat Monkeypatch)
 
@@ -700,10 +725,11 @@ Toolathlon-mvp/
 │   └── run_YYYYMMDD_HHMMSS/        #   Each parallel run gets a timestamped dir
 │       ├── <task-name>.log          #     Full stdout/stderr per task
 │       └── summary.json             #     Machine-readable pass/fail results
-├── _hijack/                         # ⚡ Network & file-open hijack module
+├── _hijack/                         # ⚡ Network, URL & file-open hijack module
 │   └── sitecustomize.py             #   Auto-loaded via PYTHONPATH; patches
-│                                    #   socket.getaddrinfo() and builtins.open()
-│                                    #   to redirect hardcoded localhost/file paths
+│                                    #   socket.getaddrinfo() (email redirect),
+│                                    #   requests/aiohttp (Canvas URL rewrite),
+│                                    #   and builtins.open() (credential file redirect)
 │                                    #   to Klavis sandbox endpoints. See:
 │                                    #   "Credential Injection & Network/File Hijacking"
 ├── configs/

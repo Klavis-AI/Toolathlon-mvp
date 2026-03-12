@@ -109,6 +109,7 @@ LOCAL_SANDBOX_SERVERS = {
     "code-executor", "code-runner", "pdf-tools",
     "google_cloud", "poste_email_toolathlon", "localmemory",
     "canvas",
+    "playwright",
 }
 
 TASK_TO_LOCAL_SANDBOX_NAME = {
@@ -118,6 +119,7 @@ TASK_TO_LOCAL_SANDBOX_NAME = {
     "emails": "poste_email_toolathlon",
     "memory": "localmemory",
     "google-cloud": "google_cloud",
+    "playwright_with_chunk": "playwright",
 }
 
 TASK_SERVER_TO_SANDBOX_NAME = {
@@ -160,6 +162,13 @@ SANDBOX_AUTH_ENV_MAPPING = {
     "weights_and_biases": {
         "api_key": "WANDB_API_KEY",
     },
+}
+
+# Extra sandbox servers needed only for preprocess/eval (not by the agent).
+# These are acquired alongside the task's needed_mcp_servers so that
+# credentials are available to preprocess and evaluation scripts.
+EXTRA_PREPROCESS_EVAL_SERVERS = {
+    "fillout-online-forms": ["google_forms"],
 }
 
 # Servers whose auth_data contains Google OAuth credentials (token,
@@ -764,6 +773,28 @@ def _create_tarball_from_directory(src_dir: Path, task_name: str) -> Optional[st
     return tarball
 
 
+def _ensure_init_chain(leaf_dir: Path) -> List[Path]:
+    """Ensure every directory from PROJECT_ROOT down to *leaf_dir* has an __init__.py.
+
+    Returns a list of __init__.py paths that were *created* (so the caller can
+    clean them up afterwards).
+    """
+    created: List[Path] = []
+    try:
+        rel = leaf_dir.relative_to(PROJECT_ROOT)
+    except ValueError:
+        return created
+    parts = rel.parts  # e.g. ("tasks", "finalpool", "git-milestone", "preprocess")
+    cur = PROJECT_ROOT
+    for part in parts:
+        cur = cur / part
+        init = cur / "__init__.py"
+        if not init.exists():
+            init.write_text("")
+            created.append(init)
+    return created
+
+
 def run_preprocess(task: dict, auth_env: Optional[Dict[str, str]] = None, launch_time: Optional[str] = None) -> Optional[str]:
     """Run ``preprocess/main.py`` if present; return tarball path for upload.
 
@@ -817,18 +848,21 @@ def run_preprocess(task: dict, auth_env: Optional[Dict[str, str]] = None, launch
     env = _build_subprocess_env(auth_env)
     env["TZ"] = "UTC"
     preprocess_dir = preprocess_main.parent
-    init = preprocess_dir / "__init__.py"
-    created_init = not init.exists()
-    if created_init:
-        init.write_text("")
+    task_dir = TASKS_DIR / task["name"]
+    # Ensure the full __init__.py chain so relative imports (e.g. from ..utils)
+    # resolve correctly when running as a deeply-qualified module.
+    created_inits = _ensure_init_chain(preprocess_dir)
+    # Put the task directory on PYTHONPATH so bare imports like
+    # ``from token_key_session import ...`` keep working.
+    env["PYTHONPATH"] = str(task_dir) + os.pathsep + env.get("PYTHONPATH", "")
     try:
-        task_dir = TASKS_DIR / task["name"]
-        cmd = [sys.executable, "-m", f"{preprocess_dir.name}.main",
+        module_path = str(preprocess_dir.relative_to(PROJECT_ROOT)).replace(os.sep, ".") + ".main"
+        cmd = [sys.executable, "-m", module_path,
                "--agent_workspace", tmp]
         if launch_time:
             cmd += ["--launch_time", launch_time]
         rc = subprocess.run(
-            cmd, cwd=str(task_dir), timeout=600, env=env,
+            cmd, cwd=str(PROJECT_ROOT), timeout=600, env=env,
         ).returncode
         if rc != 0:
             print(f"{_RED}[preprocess]{_RST} exited with code {rc}")
@@ -846,7 +880,7 @@ def run_preprocess(task: dict, auth_env: Optional[Dict[str, str]] = None, launch
         print(f"{_RED}[preprocess]{_RST} Failed: {e}")
         return task.get("tarball")
     finally:
-        if created_init:
+        for init in reversed(created_inits):
             init.unlink(missing_ok=True)
         shutil.rmtree(tmp, ignore_errors=True)
 
@@ -865,21 +899,23 @@ def evaluate(task: dict, workspace_path: str, auth_env: Optional[Dict[str, str]]
 
     eval_main = eval_dir / "main.py"
     if eval_main.exists():
-        init = eval_dir / "__init__.py"
-        created = not init.exists()
-        if created:
-            init.write_text("")
+        task_dir = TASKS_DIR / task["name"]
+        created_inits = _ensure_init_chain(eval_dir)
         env = _build_subprocess_env(auth_env)
         # Eval scripts assume datetime.now() returns UTC (they format local
         # time with a hardcoded +00:00 offset).  Force UTC in the subprocess
         # so the time filters are correct regardless of the host timezone.
         env["TZ"] = "UTC"
+        # Put the task directory on PYTHONPATH so bare imports like
+        # ``from token_key_session import ...`` keep working.
+        env["PYTHONPATH"] = str(task_dir) + os.pathsep + env.get("PYTHONPATH", "")
         # Create an empty res.json because some script expect it to exist and will error if it's missing.
         res_log_file = eval_dir / "res.json"
         res_log_file.write_text('{"messages": []}')
         try:
+            module_path = str(eval_dir.relative_to(PROJECT_ROOT)).replace(os.sep, ".") + ".main"
             cmd = [
-                sys.executable, "-m", f"{eval_dir.name}.main",
+                sys.executable, "-m", module_path,
                 "--agent_workspace", workspace_path, "--res_log_file", str(res_log_file),
             ]
             # always pass groundtruth_workspace
@@ -889,11 +925,11 @@ def evaluate(task: dict, workspace_path: str, auth_env: Optional[Dict[str, str]]
                 cmd += ["--launch_time", launch_time]
             return subprocess.run(
                 cmd,
-                cwd=str(TASKS_DIR / task["name"]),
+                cwd=str(PROJECT_ROOT),
                 env=env,
             ).returncode == 0
         finally:
-            if created:
+            for init in reversed(created_inits):
                 init.unlink(missing_ok=True)
 
     print("[eval] No evaluation script found — skipping")
@@ -959,6 +995,11 @@ async def run_task(
         all_requested = task["needed_servers"]
         if "python_execute" in task["needed_local_tools"]:
             all_requested.append("code-executor")
+        # Some tasks need extra sandbox servers for preprocess/eval only.
+        task_short = Path(task["name"]).name
+        for extra in EXTRA_PREPROCESS_EVAL_SERVERS.get(task_short, []):
+            if extra not in all_requested:
+                all_requested.append(extra)
         server_urls = klavis.acquire_for_servers(all_requested)
         if not server_urls:
             print("ERROR: Failed to acquire any sandbox servers")
@@ -1043,8 +1084,13 @@ async def run_task(
                 klavis.auth_env["KLAVIS_MCP_SERVER_URLS"] = json.dumps(klavis_mcp_env)
             print(f"  {_YELLOW}Google Cloud headers set: {list(gc_headers.keys())}{_RST}")
 
+        # Servers added only for preprocess/eval — don't expose them to the agent.
+        preprocess_only_servers = set(EXTRA_PREPROCESS_EVAL_SERVERS.get(task_short, []))
+
         mcp_servers = []
         for name, url in server_urls.items():
+            if name in preprocess_only_servers:
+                continue
             params = {"url": url, "timeout": 1200}
             if name in server_headers:
                 params["headers"] = server_headers[name]
@@ -1130,36 +1176,56 @@ def _resolve_task_list(raw: List[str]) -> List[str]:
     return tasks
 
 
-# The 52 Klavis-supported tasks (status=ready in task_status_in_klavis_sandbox.md).
-# Only these have all required MCP servers available in the Klavis sandbox.
+# All 75 Klavis-supported tasks (from task_status_in_klavis_sandbox.md).
+# These have all required MCP servers available in the Klavis sandbox.
 SUPPORTED_TASKS = [
     "ab-testing",
+    "academic-pdf-report",
     "academic-warning",
     "apply-phd-email",
     "arrange-workspace",
+    "canvas-arrange-exam",
+    "canvas-art-manager",
+    "canvas-art-quiz",
+    "canvas-do-quiz",
+    "canvas-homework-grader-python",
+    "canvas-list-test",
+    "canvas-new-students-notification",
+    "canvas-submit-late-work",
     "course-assistant",
+    "course-schedule",
     "courses-ta-hws",
+    "cvpr-research",
+    "dataset-license-issue",
     "detect-revised-terms",
     "email-paper-homepage",
     "excel-data-transformation",
     "excel-market-research",
     "experiments-recordings",
+    "fillout-online-forms",
     "filter-low-selling-products",
     "flagged-transactions",
     "game-statistics",
+    "gdp-cr5-analysis",
     "git-bug-hunt",
+    "git-milestone",
     "git-repo",
+    "hk-top-conf",
     "huggingface-upload",
     "imagenet",
+    "inter-final-performance-analysis",
     "interview-report",
     "inventory-sync",
     "landing-task-reminder",
+    "language-school",
     "live-transactions",
     "machine-operating",
+    "meeting-assign",
     "merge-hf-datasets",
     "music-analysis",
     "nhl-b2b-analysis",
     "notion-hr",
+    "notion-movies",
     "notion-personal-website",
     "paper-checker",
     "payable-invoice-checker",
@@ -1170,6 +1236,7 @@ SUPPORTED_TASKS = [
     "reimbursement-form-filler",
     "sales-accounting",
     "set-conf-cr-ddl",
+    "shopping-helper",
     "sla-timeout-monitor",
     "student-interview",
     "sync-todo-to-readme",
@@ -1177,6 +1244,8 @@ SUPPORTED_TASKS = [
     "travel-expense-reimbursement",
     "university-course-selection",
     "update-material-inventory",
+    "verl-dataset",
+    "vlm-history-completer",
     "wandb-best-score",
     "wandb-shortest-length",
     "woocommerce-customer-survey",
@@ -1189,7 +1258,7 @@ SUPPORTED_TASKS = [
 
 
 def _get_all_ready_tasks() -> List[str]:
-    """Return paths for the 52 supported tasks that exist on disk."""
+    """Return paths for the 75 supported tasks that exist on disk."""
     base = TASKS_DIR / "tasks" / "finalpool"
     if not base.exists():
         return []
@@ -1369,7 +1438,7 @@ examples:
   # Run tasks listed in a file
   python toolathlon_task_run_example.py --tasks my_tasks.txt --parallel 5
 
-  # Run ALL 52 supported tasks (default when no --task/--tasks given)
+  # Run ALL 75 supported tasks (default when no --task/--tasks given)
   python toolathlon_task_run_example.py
   python toolathlon_task_run_example.py --parallel 5
   python toolathlon_task_run_example.py --all --parallel 10
@@ -1380,7 +1449,7 @@ examples:
     parser.add_argument("--tasks", nargs="+", default=None,
                         help="Multiple task paths (or a .txt file). Each task's output is saved to a log file.")
     parser.add_argument("--all", action="store_true",
-                        help="Run all 52 supported tasks in parallel (this is the default when no --task/--tasks given)")
+                        help="Run all 75 supported tasks in parallel (this is the default when no --task/--tasks given)")
     parser.add_argument("--model", default=DEFAULT_MODEL, help="Model name")
     parser.add_argument("--max-turns", type=int, default=100, help="Max agent tool-call turns")
     parser.add_argument("--parallel", type=int, default=10,
@@ -1422,7 +1491,7 @@ examples:
         sys.exit(1 if any_fail else 0)
 
     else:
-        # Default: run all 52 supported tasks in parallel (same as --all)
+        # Default: run all 75 supported tasks in parallel (same as --all)
         task_list = _get_all_ready_tasks()
         if not task_list:
             print(f"{_RED}No supported tasks found under tasks/finalpool/{_RST}")

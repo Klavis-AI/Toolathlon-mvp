@@ -17,7 +17,7 @@ HOW IT WORKS:
     Monkey-patches requests.Session.request() and aiohttp.ClientSession._request()
     so that any HTTP request to http://localhost:10001/... or http://localhost:20001/...
     is rewritten to https://{HIJACK_CANVAS_BASE_URL}/...
-    Canvas uses an external ingress with a path prefix (e.g. 34.61.162.164/{pod_id}),
+    Canvas uses an external ingress with a path prefix (e.g. xxxxxx/{pod_id}),
     so a socket-level host:port redirect is insufficient — we need full URL rewriting
     to prepend the path prefix and switch to HTTPS.
 
