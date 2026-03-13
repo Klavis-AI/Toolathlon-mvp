@@ -65,8 +65,7 @@ LOCAL_TOOL_MAPPINGS = {
 
 TASKS_DIR = PROJECT_ROOT # change to your directory where you put the tasks
 OUTPUT_DIR = PROJECT_ROOT
-DEFAULT_MODEL = "litellm/gemini/gemini-3-flash-preview"
-
+DEFAULT_MODEL = "litellm/openrouter/minimax/minimax-m2.5"
 def _ansi(code: str) -> str:
     return code if sys.stdout.isatty() else ""
 
@@ -126,6 +125,8 @@ TASK_SERVER_TO_SANDBOX_NAME = {
     "arxiv-latex": "arxiv_latex",
     "google_sheet": "google_sheets",
     "wandb": "weights_and_biases",
+    "google_map": "google_maps",
+    "rail_12306": "12306"
 }
 
 # Task-level token_key_session.py must use os.environ.get("KLAVIS_*") to pick up
@@ -891,11 +892,14 @@ def evaluate(task: dict, workspace_path: str, auth_env: Optional[Dict[str, str]]
 
     check_local = eval_dir / "check_local.py"
     if check_local.exists():
-        spec = importlib.util.spec_from_file_location("check_local", str(check_local))
-        mod = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(mod)
-        if hasattr(mod, "check_file_structure"):
-            return mod.check_file_structure(workspace_path)
+        try:
+            spec = importlib.util.spec_from_file_location("check_local", str(check_local))
+            mod = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(mod)
+            if hasattr(mod, "check_file_structure"):
+                return mod.check_file_structure(workspace_path)
+        except ImportError:
+            pass  # Fall through to module-based execution of main.py
 
     eval_main = eval_dir / "main.py"
     if eval_main.exists():
@@ -1111,7 +1115,11 @@ async def run_task(
                 model=model,
                 mcp_servers=manager.active_servers,
                 tools=local_tools or [],
-                model_settings=ModelSettings(parallel_tool_calls=True),
+                model_settings=ModelSettings(
+                    parallel_tool_calls=True,
+                    # OpenRouter middle-out: auto-compress prompts exceeding context window
+                    extra_body={"transforms": ["middle-out"]},
+                ),
             )
 
             print(f"\n[agent] Running …\n")
