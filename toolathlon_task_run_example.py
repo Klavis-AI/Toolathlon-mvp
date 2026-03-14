@@ -915,7 +915,10 @@ def evaluate(task: dict, workspace_path: str, auth_env: Optional[Dict[str, str]]
         env["PYTHONPATH"] = str(task_dir) + os.pathsep + env.get("PYTHONPATH", "")
         # Create an empty res.json because some script expect it to exist and will error if it's missing.
         res_log_file = eval_dir / "res.json"
-        res_log_file.write_text('{"messages": []}')
+        res_data: dict = {"messages": []}
+        if launch_time: # task like train-ticket-plan need this
+            res_data["config"] = {"launch_time": launch_time}
+        res_log_file.write_text(json.dumps(res_data))
         try:
             module_path = str(eval_dir.relative_to(PROJECT_ROOT)).replace(os.sep, ".") + ".main"
             cmd = [
