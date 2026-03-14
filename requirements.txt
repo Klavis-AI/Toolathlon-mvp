@@ -30,3 +30,4 @@ yfinance
 wandb
 bibtexparser
 arxiv
+pyarrow
