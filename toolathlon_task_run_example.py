@@ -1187,12 +1187,13 @@ def _resolve_task_list(raw: List[str]) -> List[str]:
     return tasks
 
 
-# All 75 Klavis-supported tasks (from task_status_in_klavis_sandbox.md).
+# All 103 tasks excluding k8s
 # These have all required MCP servers available in the Klavis sandbox.
 SUPPORTED_TASKS = [
     "ab-testing",
     "academic-pdf-report",
     "academic-warning",
+    "add-bibtex",
     "apply-phd-email",
     "arrange-workspace",
     "canvas-arrange-exam",
@@ -1203,18 +1204,21 @@ SUPPORTED_TASKS = [
     "canvas-list-test",
     "canvas-new-students-notification",
     "canvas-submit-late-work",
+    "cooking-guidance",
     "course-assistant",
     "course-schedule",
     "courses-ta-hws",
     "cvpr-research",
     "dataset-license-issue",
     "detect-revised-terms",
+    "dietary-health",
     "email-paper-homepage",
     "excel-data-transformation",
     "excel-market-research",
     "experiments-recordings",
     "fillout-online-forms",
     "filter-low-selling-products",
+    "find-alita-paper",
     "flagged-transactions",
     "game-statistics",
     "gdp-cr5-analysis",
@@ -1223,38 +1227,60 @@ SUPPORTED_TASKS = [
     "git-repo",
     "hk-top-conf",
     "huggingface-upload",
+    "identify-all-songs",
     "imagenet",
     "inter-final-performance-analysis",
     "interview-report",
     "inventory-sync",
+    "investment-decision-analysis",
+    "invoice-org",
+    "ipad-edu-price",
     "landing-task-reminder",
     "language-school",
+    "latex-prompt-box",
     "live-transactions",
+    "llm-training-dataset",
+    "logical-datasets-collection",
     "machine-operating",
     "meeting-assign",
     "merge-hf-datasets",
+    "mrbeast-analysis",
     "music-analysis",
     "nhl-b2b-analysis",
+    "notion-find-job",
     "notion-hr",
     "notion-movies",
     "notion-personal-website",
+    "nvidia-market",
+    "nvidia-stock-analysis",
+    "oil-price",
     "paper-checker",
     "payable-invoice-checker",
     "personal-website-construct",
     "ppt-analysis",
     "price-comparison",
     "privacy-desensitization",
+    "profile-update-online",
+    "quantitative-financial-analysis",
     "reimbursement-form-filler",
     "sales-accounting",
+    "search-ca-school",
     "set-conf-cr-ddl",
     "shopping-helper",
     "sla-timeout-monitor",
+    "stock-build-position",
     "student-interview",
+    "subway-planning",
     "sync-todo-to-readme",
     "task-tracker",
+    "train-ticket-plan",
+    "travel-exchange",
     "travel-expense-reimbursement",
+    "trip-adviser",
+    "trip-itinerary-generator",
     "university-course-selection",
     "update-material-inventory",
+    "upenn-campus-route",
     "verl-dataset",
     "vlm-history-completer",
     "wandb-best-score",
@@ -1265,11 +1291,13 @@ SUPPORTED_TASKS = [
     "woocommerce-product-recall",
     "woocommerce-stock-alert",
     "woocommerce-update-cover",
+    "yahoo-analysis",
+    "youtube-repo",
 ]
 
 
 def _get_all_ready_tasks() -> List[str]:
-    """Return paths for the 75 supported tasks that exist on disk."""
+    """Return paths for the 103 supported tasks that exist on disk."""
     base = TASKS_DIR / "tasks" / "finalpool"
     if not base.exists():
         return []
@@ -1449,7 +1477,7 @@ examples:
   # Run tasks listed in a file
   python toolathlon_task_run_example.py --tasks my_tasks.txt --parallel 5
 
-  # Run ALL 75 supported tasks (default when no --task/--tasks given)
+  # Run ALL 103 supported tasks (default when no --task/--tasks given)
   python toolathlon_task_run_example.py
   python toolathlon_task_run_example.py --parallel 5
   python toolathlon_task_run_example.py --all --parallel 10
@@ -1460,7 +1488,7 @@ examples:
     parser.add_argument("--tasks", nargs="+", default=None,
                         help="Multiple task paths (or a .txt file). Each task's output is saved to a log file.")
     parser.add_argument("--all", action="store_true",
-                        help="Run all 75 supported tasks in parallel (this is the default when no --task/--tasks given)")
+                        help="Run all 103 supported tasks in parallel (this is the default when no --task/--tasks given)")
     parser.add_argument("--model", default=DEFAULT_MODEL, help="Model name")
     parser.add_argument("--max-turns", type=int, default=100, help="Max agent tool-call turns")
     parser.add_argument("--parallel", type=int, default=10,
@@ -1502,7 +1530,7 @@ examples:
         sys.exit(1 if any_fail else 0)
 
     else:
-        # Default: run all 75 supported tasks in parallel (same as --all)
+        # Default: run all 103 supported tasks in parallel (same as --all)
         task_list = _get_all_ready_tasks()
         if not task_list:
             print(f"{_RED}No supported tasks found under tasks/finalpool/{_RST}")
