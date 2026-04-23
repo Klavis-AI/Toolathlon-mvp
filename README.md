@@ -697,11 +697,10 @@ If you are building your own Toolathlon runner (or adapting this code), here is 
 
 ### Special Case: Handling Notion Tasks
 
-Toolathlon Notion tasks use a unique preprocessing approach: instead of initializing mock data from scratch, they duplicate and move existing Notion pages. In this `klavis-toolathlon` runner, this is handled seamlessly:
+Toolathlon Notion tasks use a unique preprocessing approach: instead of initializing mock data from scratch, they create fresh per-task pages under the eval hub from templates in the source hub. In this `klavis-toolathlon` runner, this is handled seamlessly:
 
 1. **Pre-configured Accounts:** The Klavis Sandbox backend already manages the Notion account setup, integration keys, and page URLs. You do not need to perform manual Notion setup; these values are dynamically injected for use in `configs/token_key_session.py`.
-2. **Official MCP Token Extraction & Auto-Refresh:** When the runner acquires the `notion` sandbox from Klavis, it extracts the Notion access token from the returned auth data and sets it as `KLAVIS_NOTION_OFFICIAL_MCP_ACCESS_TOKEN` (`toolathlon_task_run_example.py`). Furthermore, Klavis backend has OAuth server that automatically handles token refreshing, ensuring your Notion access token is always up to date when acquire sandbox.
-3. **Direct Official Connection:** Using this token, the runner registers a `notion_official` MCP server pointing directly to `https://mcp.notion.com/mcp` (`utils/mcp/tool_servers.py`). This allows the local preprocess scripts to connect to the official Notion MCP to successfully duplicate and arrange the required pages.
+2. **Create-from-Template (single REST call):** When preprocess runs, `notion_page_duplicator.duplicate_page_with_mcp()` authenticates with the sandbox's integration key (`KLAVIS_NOTION_INTEGRATION_KEY`) and issues a single `POST https://api.notion.com/v1/pages` with `template.template_id=<source_page_id>` and `parent.page_id=<eval_hub_id>`. This replaces the previous duplicate-and-move flow that required the official Notion MCP OAuth access token and up to ~8 retries while Notion synced the duplicate before the move could target it. End-to-end setup typically drops from ~15–30s to ~1–5s, and no OAuth access token is required.
 
 ---
 
