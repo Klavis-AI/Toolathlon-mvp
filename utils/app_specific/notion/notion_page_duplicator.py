@@ -26,13 +26,15 @@ import time
 from pathlib import Path
 from typing import Optional, Tuple
 
+import httpx
 from notion_client import Client
 from playwright.sync_api import Browser, Page, sync_playwright, TimeoutError as PlaywrightTimeoutError
 
-from utils.mcp.tool_servers import MCPServerManager, call_tool_with_retry, ToolCallError
 import asyncio
-import json
 import time
+
+NOTION_API_BASE = "https://api.notion.com/v1"
+NOTION_VERSION = "2026-03-11"
 
 # Import the protection module
 import sys
@@ -61,6 +63,7 @@ class NotionPageDuplicator:
             browser: Browser to use ("firefox" or "chromium")
             headless: Whether to run browser in headless mode
         """
+        self.notion_key = notion_key
         self.notion_client = Client(auth=notion_key)
         self.browser_name = browser
         self.headless = headless
@@ -465,103 +468,80 @@ class NotionPageDuplicator:
             return None
     
     async def duplicate_page_with_mcp(self, child_page_id: str, target_parent_id: str, child_name: str) -> Optional[str]:
-        # the functionlity is the same as with playwright but we use notion official mcp to do so
-        notion_official_server = MCPServerManager(agent_workspace="./").servers['notion_official']
-        async with notion_official_server as server:
-            res = await call_tool_with_retry(server, "notion-duplicate-page", {"page_id": child_page_id})
-            data = json.loads(res.content[0].text)
+        """Create a new page under target_parent_id using child_page_id as a template.
 
-            # Check if duplication was successful
-            if 'name' in data and data.get('name') == 'APIResponseError':
-                error_body = json.loads(data.get('body', '{}'))
-                error_msg = error_body.get('message', 'Unknown error')
-                raise Exception(f"Failed to duplicate page: {error_msg}")
+        Replaces the previous duplicate-and-move flow (official Notion MCP
+        `notion-duplicate-page` + `notion-move-pages`) with a single Notion
+        REST call: POST /v1/pages with template.template_id. Authenticates
+        with the integration key — no OAuth access_token needed. Notion
+        applies the template asynchronously, so we still poll until the
+        new page is retrievable before returning.
+        """
+        headers = {
+            "Authorization": f"Bearer {self.notion_key}",
+            "Notion-Version": NOTION_VERSION,
+            "Content-Type": "application/json",
+        }
+        body = {
+            "parent":   {"type": "page_id",     "page_id":     target_parent_id},
+            "template": {"type": "template_id", "template_id": child_page_id},
+        }
 
-            duplicated_page_id = data['page_id']
-            print(f"Duplicated page ID: {duplicated_page_id}")
-            self.duplicated_page_id = duplicated_page_id
-            print(f"Target parent ID: {target_parent_id}")
-            # use notion api to check if the page is ready, if not we wait for 1s
+        max_attempts = 5
+        duplicated_page_id: Optional[str] = None
+        last_exc: Optional[BaseException] = None
+        for attempt in range(1, max_attempts + 1):
+            try:
+                print(f"Creating page from template {child_page_id} → parent={target_parent_id} (attempt {attempt}/{max_attempts})")
+                resp = httpx.post(
+                    f"{NOTION_API_BASE}/pages",
+                    headers=headers,
+                    json=body,
+                    timeout=60,
+                )
+                if resp.status_code != 200:
+                    raise RuntimeError(f"POST /pages HTTP {resp.status_code}: {resp.text[:300]}")
+                data = resp.json()
+                duplicated_page_id = data.get("id")
+                if not duplicated_page_id:
+                    raise RuntimeError(f"POST /pages returned no id: body={resp.text[:300]}")
+                print(f"Created page: {duplicated_page_id}")
+                break
+            except Exception as e:
+                last_exc = e
+                if attempt < max_attempts:
+                    wait_time = min(2 ** attempt, 60)
+                    print(f"Create-from-template failed (attempt {attempt}/{max_attempts}): {e}. Retrying in {wait_time}s...")
+                    await asyncio.sleep(wait_time)
 
-            timeout = 600
-            current_time = 0
-            page_ready = False
-            page_type = None
-            while current_time < timeout:
-                try:
-                    page_info = self.notion_client.pages.retrieve(page_id=duplicated_page_id)
-                    if page_info:
-                        page_ready = True
-                        page_type = page_info.get('object', 'unknown')
-                        print(f"Page is ready! Object type: {page_type}")
-                        break
-                except Exception as e:
-                    print(f"Page not ready! Waiting for 1s... Error: {e}")
-                    time.sleep(1)
-                    current_time += 1
-            if not page_ready:
-                raise Exception(f"Page not ready after {timeout} seconds!")
+        if not duplicated_page_id:
+            raise Exception(f"Failed to create page from template after {max_attempts} attempts: {last_exc}")
 
-            # Additional check for page type
-            if page_type != 'page':
-                print(f"WARNING: Retrieved object type is '{page_type}', not 'page'. This might cause issues.")
+        self.duplicated_page_id = duplicated_page_id
 
-            # Try to move the page with retry logic for "not ready" errors
-            max_move_attempts = 8
-            move_attempt = 0
-            move_successful = False
-
-            while move_attempt < max_move_attempts:
-                move_attempt += 1
-
-                try:
-                    res = await call_tool_with_retry(server, "notion-move-pages", {
-                            "page_or_database_ids": [duplicated_page_id],
-                            "new_parent": {
-                                "page_id":target_parent_id
-                                }
-                            }
-                        )
-                    data = json.loads(res.content[0].text)
-                    print(data)
-
-                    # Check if it's an error response
-                    if 'name' in data and data.get('name') == 'APIResponseError':
-                        error_body = json.loads(data.get('body', '{}'))
-                        error_msg = error_body.get('message', 'Unknown error')
-                        error_code = error_body.get('code', '')
-
-                        # Check if it's a "not ready" error
-                        if 'not a page or database' in error_msg.lower() or error_code == 'validation_error':
-                            if move_attempt < max_move_attempts:
-                                wait_time = 2 ** move_attempt # Exponential backoff: 2s, 4s, 8s, 16s, 32s, 64s, 128s, 256s, 512s, 1024s
-                                print(f"Page not fully ready yet (attempt {move_attempt}/{max_move_attempts}). Waiting {wait_time}s before retry...")
-                                time.sleep(wait_time)
-                                continue
-
-                        raise Exception(f"Failed to move the page: {error_msg}")
-
-                    if 'result' not in data or not data['result'].startswith("Success"):
-                        raise Exception(f"Failed to move the page: {data.get('result', 'No result returned')}")
-
-                    # Success!
-                    move_successful = True
+        # Notion applies the template asynchronously after the response returns —
+        # poll until the page is retrievable with properties populated.
+        timeout = 120
+        elapsed = 0
+        page_ready = False
+        while elapsed < timeout:
+            try:
+                page_info = self.notion_client.pages.retrieve(page_id=duplicated_page_id)
+                if page_info and page_info.get("properties"):
+                    page_ready = True
+                    print(f"Page is ready after {elapsed}s")
                     break
+            except Exception as e:
+                print(f"Page not ready yet ({elapsed}s): {e}")
+            await asyncio.sleep(2)
+            elapsed += 2
+        if not page_ready:
+            raise Exception(f"Page not ready after {timeout} seconds!")
 
-                except Exception as e:
-                    if move_attempt >= max_move_attempts:
-                        raise
-                    # For other exceptions, also retry
-                    wait_time = move_attempt * 2
-                    print(f"Move failed (attempt {move_attempt}/{max_move_attempts}): {e}")
-                    print(f"Waiting {wait_time}s before retry...")
-                    time.sleep(wait_time)
-
-            if not move_successful:
-                raise Exception(f"Failed to move the page after {max_move_attempts} attempts")
         self.rename_page_via_api(duplicated_page_id, child_name)
         return f"https://www.notion.so/{duplicated_page_id.replace('-', '')}"
-        
+
+
 
     def duplicate_child_page(self, source_parent_url: str, child_name: str, target_parent_url: str, with_playwright=WITH_PLAYWRIGHT) -> bool:
         """
