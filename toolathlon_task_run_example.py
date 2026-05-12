@@ -363,17 +363,6 @@ class KlavisSandbox:
                   f"no credentials injected. Keys in auth_data: {list(auth.keys())}, "
                   f"keys in metadata: {list(meta.keys())}")
 
-        if server_name == "notion":
-            ## set the notion official mcp access token, because Toolathlon preprocess scripts need use the official notion mcp to duplicate pages
-            for source in [auth, meta, details]:
-                mcp_auth = source.get("mcp_auth_data")
-                if isinstance(mcp_auth, dict):
-                    notion_official_access_token = (mcp_auth.get("token") or {}).get("access_token")
-                    if notion_official_access_token:
-                        self.auth_env["KLAVIS_NOTION_OFFICIAL_MCP_ACCESS_TOKEN"] = notion_official_access_token
-                        print(f"[Klavis] Set KLAVIS_NOTION_OFFICIAL_MCP_ACCESS_TOKEN")
-                        break
-
     def _apply_snowflake_private_key(self):
         """Write SNOWFLAKE_PRIVATE_KEY to a temp file and set the PATH env var."""
         pk = self.auth_env.get("KLAVIS_SNOWFLAKE_PRIVATE_KEY")
