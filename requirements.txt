@@ -1,5 +1,6 @@
 httpx
 python-dotenv
+openai
 openai-agents
 addict
 requests

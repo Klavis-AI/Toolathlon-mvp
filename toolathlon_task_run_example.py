@@ -3,8 +3,9 @@ Toolathlon task runner using Klavis Sandbox + OpenAI Agents SDK.
 
 Usage:
     export KLAVIS_API_KEY=...
-    export ANTHROPIC_API_KEY=...
-    export OPENAI_API_KEY=...
+    export INTERNAL_API_KEY=...
+    export INTERNAL_BASE_URL=...
+    export INTERNAL_DEFAULT_MODEL=...
     python toolathlon_task_run_example.py --task [task_name]
 """
 
@@ -30,8 +31,15 @@ from typing import Dict, Optional, List
 import httpx
 import litellm
 from dotenv import load_dotenv
-from agents import Agent, Runner, RunHooks, ModelSettings
+from agents import (
+    Agent,
+    ModelSettings,
+    OpenAIChatCompletionsModel,
+    Runner,
+    RunHooks,
+)
 from agents.mcp import MCPServerManager, MCPServerStreamableHttp
+from openai import AsyncOpenAI
 
 PROJECT_ROOT = Path(__file__).resolve().parent 
 sys.path.insert(0, str(PROJECT_ROOT))
@@ -65,7 +73,22 @@ LOCAL_TOOL_MAPPINGS = {
 
 TASKS_DIR = PROJECT_ROOT # change to your directory where you put the tasks
 OUTPUT_DIR = PROJECT_ROOT
-DEFAULT_MODEL = "litellm/openrouter/minimax/minimax-m2.5"
+API_KEY = os.environ.get("INTERNAL_API_KEY") or os.environ.get("OPENAI_API_KEY") or os.environ.get("API_KEY")
+BASE_URL = os.environ.get("INTERNAL_BASE_URL") or os.environ.get("OPENAI_BASE_URL") or os.environ.get("BASE_URL")
+DEFAULT_MODEL = os.environ.get("INTERNAL_DEFAULT_MODEL")
+
+def _build_openai_chat_model(model_name: str) -> OpenAIChatCompletionsModel:
+    """Build an OpenAI-compatible Chat Completions model for the Agents SDK."""
+    if not API_KEY:
+        raise RuntimeError("INTERNAL_API_KEY must be set to run the GPT agent")
+
+    client_kwargs = {"api_key": API_KEY}
+    if BASE_URL:
+        client_kwargs["base_url"] = BASE_URL
+
+    client = AsyncOpenAI(**client_kwargs)
+    return OpenAIChatCompletionsModel(model=model_name, openai_client=client)
+
 def _ansi(code: str) -> str:
     return code if sys.stdout.isatty() else ""
 
@@ -1101,10 +1124,11 @@ async def run_task(
             )
 
         async with MCPServerManager(mcp_servers) as manager:
+            openai_model = _build_openai_chat_model(model)
             agent = Agent(
                 name="TaskAgent",
                 instructions=task["system_prompt"],
-                model=model,
+                model=openai_model,
                 mcp_servers=manager.active_servers,
                 tools=local_tools or [],
                 model_settings=ModelSettings(
@@ -1487,6 +1511,8 @@ examples:
     parser.add_argument("--preprocess-only", action="store_true",
                         help="Only run preprocess + upload, then stop (skip agent, download, eval)")
     args = parser.parse_args()
+    if not args.model:
+        parser.error("Set INTERNAL_DEFAULT_MODEL in .env or pass --model")
 
     # Determine which mode to use
     modes_set = sum([args.task is not None, args.tasks is not None, args.all])
