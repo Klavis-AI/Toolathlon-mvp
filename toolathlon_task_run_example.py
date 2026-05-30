@@ -38,6 +38,9 @@ sys.path.insert(0, str(PROJECT_ROOT))
 
 load_dotenv(PROJECT_ROOT / ".env")
 
+from utils.mcp.patch_mcp_retry import apply_mcp_retry_patch
+apply_mcp_retry_patch()
+
 logging.getLogger("openai.agents").setLevel(logging.CRITICAL) # Suppress OpenAI Agents SDK logging, this is non-fatal.
 
 # LiteLLM retry settings — helps survive transient SSL/network errors
