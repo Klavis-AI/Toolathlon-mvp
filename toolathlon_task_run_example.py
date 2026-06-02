@@ -76,18 +76,76 @@ OUTPUT_DIR = PROJECT_ROOT
 API_KEY = os.environ.get("INTERNAL_API_KEY") or os.environ.get("OPENAI_API_KEY") or os.environ.get("API_KEY")
 BASE_URL = os.environ.get("INTERNAL_BASE_URL") or os.environ.get("OPENAI_BASE_URL") or os.environ.get("BASE_URL")
 DEFAULT_MODEL = os.environ.get("INTERNAL_DEFAULT_MODEL")
+OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY")
+OPENROUTER_BASE_URL = os.environ.get("OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1")
+OPENROUTER_PROVIDER_PREFIXES = (
+    "qwen/",
+    "openai/",
+    "anthropic/",
+    "google/",
+    "meta-llama/",
+    "mistralai/",
+    "deepseek/",
+    "x-ai/",
+)
+
+def _model_alias_key(model_name: str) -> str:
+    return "".join(ch for ch in model_name.lower() if ch.isalnum())
+
+def _resolve_model_name(model_name: str) -> str:
+    """Resolve local shorthand names to provider model IDs."""
+    model = model_name.strip().strip("\"'")
+    if model.startswith("openrouter:"):
+        model = model.removeprefix("openrouter:").strip()
+    aliases = {
+        "qwen37max": "qwen/qwen3.7-max",
+        "qwen37maxthinking": "qwen/qwen3.7-max",
+        "qwen237maxthinking": "qwen/qwen3.7-max",
+    }
+    return aliases.get(_model_alias_key(model), model)
+
+def _is_openrouter_model(model_name: str) -> bool:
+    model = _resolve_model_name(model_name)
+    raw_model = model_name.strip().strip("\"'")
+    return (
+        model != raw_model
+        or raw_model.startswith("openrouter:")
+        or model.startswith(OPENROUTER_PROVIDER_PREFIXES)
+    )
+
+def _openrouter_reasoning_effort(model_name: str) -> Optional[str]:
+    if not _is_openrouter_model(model_name):
+        return None
+
+    model = _resolve_model_name(model_name)
+    alias_key = _model_alias_key(model_name)
+    if model in {"qwen/qwen3.7-max", "qwen/qwen3-max-thinking"} or "thinking" in alias_key:
+        return os.environ.get("OPENROUTER_REASONING_EFFORT", "xhigh")
+    return None
+
+def _model_extra_body(model_name: str) -> Dict:
+    extra_body = {"transforms": ["middle-out"]}
+    reasoning_effort = _openrouter_reasoning_effort(model_name)
+    if reasoning_effort and reasoning_effort.lower() != "none":
+        extra_body["reasoning"] = {"effort": reasoning_effort}
+    return extra_body
 
 def _build_openai_chat_model(model_name: str) -> OpenAIChatCompletionsModel:
     """Build an OpenAI-compatible Chat Completions model for the Agents SDK."""
-    if not API_KEY:
-        raise RuntimeError("INTERNAL_API_KEY must be set to run the GPT agent")
-
-    client_kwargs = {"api_key": API_KEY}
-    if BASE_URL:
-        client_kwargs["base_url"] = BASE_URL
+    resolved_model = _resolve_model_name(model_name)
+    if _is_openrouter_model(model_name):
+        if not OPENROUTER_API_KEY:
+            raise RuntimeError("OPENROUTER_API_KEY must be set to run OpenRouter models")
+        client_kwargs = {"api_key": OPENROUTER_API_KEY, "base_url": OPENROUTER_BASE_URL}
+    else:
+        if not API_KEY:
+            raise RuntimeError("INTERNAL_API_KEY must be set to run the GPT agent")
+        client_kwargs = {"api_key": API_KEY}
+        if BASE_URL:
+            client_kwargs["base_url"] = BASE_URL
 
     client = AsyncOpenAI(**client_kwargs)
-    return OpenAIChatCompletionsModel(model=model_name, openai_client=client)
+    return OpenAIChatCompletionsModel(model=resolved_model, openai_client=client)
 
 def _ansi(code: str) -> str:
     return code if sys.stdout.isatty() else ""
@@ -1134,7 +1192,7 @@ async def run_task(
                 model_settings=ModelSettings(
                     parallel_tool_calls=True,
                     # OpenRouter middle-out: auto-compress prompts exceeding context window
-                    extra_body={"transforms": ["middle-out"]},
+                    extra_body=_model_extra_body(model),
                 ),
             )
 
